@@ -1,0 +1,118 @@
+const { validatePlay, resolveTrick, checkConsecutiveWins } = require('../gameLogic/turnEngine');
+
+function makeRoom() {
+    return {
+        currentBatterIndex: 0,
+        activeSuit: 'H',
+        trumpSuit: null,
+        trumpRevealed: false,
+        currentTurn: 2,
+        openMode: false,
+        doubleOpenMode: false,
+        openDeclaredByTeam: null,
+        trickCards: [
+            { playerId: 'p0', card: null, hidden: false },
+            { playerId: 'p1', card: null, hidden: false },
+            { playerId: 'p2', card: null, hidden: false },
+            { playerId: 'p3', card: null, hidden: false },
+        ],
+        lastTrickWinnerIndex: null,
+        consecutiveBowlingWins: 0,
+        lastTrickWasAce: false,
+        players: [
+            { id: 'p0', playerIndex: 0, teamIndex: 0, hand: [] },
+            { id: 'p1', playerIndex: 1, teamIndex: 1, hand: [] },
+            { id: 'p2', playerIndex: 2, teamIndex: 0, hand: [] },
+            { id: 'p3', playerIndex: 3, teamIndex: 1, hand: [] },
+        ],
+        currentPlayerIndex: 1,
+    };
+}
+
+describe('turnEngine', () => {
+    test('Player with the activeSuit in hand is rejected if they play a different suit', () => {
+        const room = makeRoom();
+        const p1 = room.players[1];
+        p1.hand = [
+            { suit: 'H', value: 9, id: 'H-9' },
+            { suit: 'S', value: 14, id: 'S-14' },
+        ];
+        const res = validatePlay(room, 'p1', 'S-14');
+        expect(res.valid).toBe(false);
+        expect(res.errorCode).toBe('INVALID_SUIT');
+    });
+
+    test('Player without the activeSuit may play any card without error', () => {
+        const room = makeRoom();
+        const p1 = room.players[1];
+        p1.hand = [{ suit: 'S', value: 14, id: 'S-14' }];
+        const res = validatePlay(room, 'p1', 'S-14');
+        expect(res.valid).toBe(true);
+    });
+
+    test('Trick winner: highest activeSuit card wins when no trump played', () => {
+        const room = makeRoom();
+        room.trickCards[0].card = { suit: 'H', value: 10, id: 'H-10' };
+        room.trickCards[1].card = { suit: 'H', value: 14, id: 'H-14' };
+        room.trickCards[2].card = { suit: 'H', value: 13, id: 'H-13' };
+        room.trickCards[3].card = { suit: 'D', value: 2, id: 'D-2' };
+        const r = resolveTrick(room);
+        expect(r.winnerPlayerId).toBe('p1');
+    });
+
+    test('Trick winner: trump card beats higher activeSuit card', () => {
+        const room = makeRoom();
+        room.trumpRevealed = true;
+        room.trumpSuit = 'S';
+        room.trickCards[0].card = { suit: 'H', value: 14, id: 'H-14' };
+        room.trickCards[1].card = { suit: 'S', value: 2, id: 'S-2' };
+        room.trickCards[2].card = { suit: 'H', value: 13, id: 'H-13' };
+        room.trickCards[3].card = { suit: 'H', value: 12, id: 'H-12' };
+        const r = resolveTrick(room);
+        expect(r.winnerPlayerId).toBe('p1');
+    });
+
+    test('Trick winner: highest trump wins when multiple trump played', () => {
+        const room = makeRoom();
+        room.trumpRevealed = true;
+        room.trumpSuit = 'S';
+        room.trickCards[0].card = { suit: 'S', value: 10, id: 'S-10' };
+        room.trickCards[1].card = { suit: 'S', value: 14, id: 'S-14' };
+        room.trickCards[2].card = { suit: 'H', value: 13, id: 'H-13' };
+        room.trickCards[3].card = { suit: 'S', value: 12, id: 'S-12' };
+        const r = resolveTrick(room);
+        expect(r.winnerPlayerId).toBe('p1');
+    });
+
+    test('Consecutive win counter increments correctly', () => {
+        const room = makeRoom();
+        // Batter team is team0 => bowling team is team1 (target).
+        room.lastTrickWinnerIndex = 0;
+        room.consecutiveBowlingWins = 0;
+        const res = checkConsecutiveWins(room, 1, { suit: 'H', value: 13, id: 'H-13' });
+        expect(res.roundOver).toBe(false);
+        expect(room.consecutiveBowlingWins).toBe(1);
+    });
+
+    test('Ace exception: two consecutive bowling wins with aces do NOT trigger round end', () => {
+        const room = makeRoom();
+        // First target win with Ace
+        room.lastTrickWinnerIndex = 0;
+        checkConsecutiveWins(room, 1, { suit: 'H', value: 14, id: 'H-14' });
+        room.lastTrickWinnerIndex = 1;
+        // Second target win with Ace should not increment
+        const res = checkConsecutiveWins(room, 1, { suit: 'D', value: 14, id: 'D-14' });
+        expect(res.roundOver).toBe(false);
+        expect(room.consecutiveBowlingWins).toBe(1);
+    });
+
+    test('Two consecutive bowling wins with non-ace cards DO trigger round end', () => {
+        const room = makeRoom();
+        room.lastTrickWinnerIndex = 0;
+        checkConsecutiveWins(room, 1, { suit: 'H', value: 13, id: 'H-13' });
+        room.lastTrickWinnerIndex = 1;
+        const res = checkConsecutiveWins(room, 1, { suit: 'D', value: 12, id: 'D-12' });
+        expect(res.roundOver).toBe(true);
+        expect(res.winnerTeam).toBe(1);
+    });
+});
