@@ -1,0 +1,565 @@
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  ReactNode,
+} from "react";
+import { io, Socket } from "socket.io-client";
+
+const SERVER_URL = "http://localhost:3001";
+const STORAGE_KEY = "rang_advance_session";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+export type Suit = "H" | "D" | "C" | "S";
+
+export interface Card {
+  suit: Suit;
+  value: number;
+  id: string;
+}
+
+export interface TrickCard {
+  playerId: string;
+  card: Card | null;
+  hidden?: boolean;
+}
+
+export interface Player {
+  id: string;
+  name: string;
+  teamIndex: number;
+  playerIndex: number;
+  connected: boolean;
+  handSize?: number;
+}
+
+export interface RoundScore {
+  round: number;
+  winnerTeam: number;
+  team0Points: number;
+  team1Points: number;
+}
+
+export type Screen =
+  | "home"
+  | "lobby"
+  | "toss"
+  | "select_batter"
+  | "game"
+  | "game_over";
+
+export interface GameState {
+  socketConnected: boolean;
+
+  // Identity
+  myPlayerId: string | null;
+  myPlayerName: string;
+  roomCode: string | null;
+  isHost: boolean;
+  hostSocketId: string | null;
+
+  // Navigation
+  screen: Screen;
+  serverPhase: string;
+
+  // Room
+  players: Player[];
+
+  // Private hand
+  myHand: Card[];
+
+  // Game state (visible)
+  trickCards: TrickCard[];
+  currentPlayerIndex: number;
+  activeSuit: string | null;
+  trumpSuit: string | null;
+  trumpRevealed: boolean;
+  currentTurn: number;
+  currentRound: number;
+  currentBatterIndex: number;
+  openMode: boolean;
+  doubleOpenMode: boolean;
+  openDeclaredByTeam: number | null;
+  openDeclaredByPlayerId: string | null;
+  openCountForBatter: number;
+  consecutiveBowlingWins: number;
+
+  // Toss
+  tossWinnerId: string | null;
+
+  // Scores
+  roundScores: RoundScore[];
+  totalScores: [number, number];
+
+  // UI feedback
+  lastError: string | null;
+  lastTrickWinner: { playerId: string; playerIndex: number } | null;
+  roundResult: { winnerTeam: number; scores?: any } | null;
+  pausedForPlayerId: string | null;
+}
+
+// ─── Context ──────────────────────────────────────────────────────────────────
+
+interface GameContextValue {
+  state: GameState;
+  // Actions
+  createRoom: (playerName: string) => void;
+  joinRoom: (roomCode: string, playerName: string) => void;
+  startGame: () => void;
+  selectBatter: (targetPlayerId: string) => void;
+  playCard: (cardId: string) => void;
+  declareOpen: (trumpSuit: Suit) => void;
+  declareDoubleOpen: (trumpSuit: Suit) => void;
+  leaveRoom: () => void;
+  clearError: () => void;
+  dismissTrickWinner: () => void;
+  dismissRoundResult: () => void;
+}
+
+const GameContext = createContext<GameContextValue | null>(null);
+
+export function useGame() {
+  const ctx = useContext(GameContext);
+  if (!ctx) throw new Error("useGame must be used inside GameProvider");
+  return ctx;
+}
+
+// ─── Initial State ────────────────────────────────────────────────────────────
+
+const INITIAL_STATE: GameState = {
+  socketConnected: false,
+  myPlayerId: null,
+  myPlayerName: "",
+  roomCode: null,
+  isHost: false,
+  hostSocketId: null,
+  screen: "home",
+  serverPhase: "lobby",
+  players: [],
+  myHand: [],
+  trickCards: [],
+  currentPlayerIndex: 0,
+  activeSuit: null,
+  trumpSuit: null,
+  trumpRevealed: false,
+  currentTurn: 1,
+  currentRound: 1,
+  currentBatterIndex: 0,
+  openMode: false,
+  doubleOpenMode: false,
+  openDeclaredByTeam: null,
+  openDeclaredByPlayerId: null,
+  openCountForBatter: 0,
+  consecutiveBowlingWins: 0,
+  tossWinnerId: null,
+  roundScores: [],
+  totalScores: [0, 0],
+  lastError: null,
+  lastTrickWinner: null,
+  roundResult: null,
+  pausedForPlayerId: null,
+};
+
+// ─── Session Persistence ──────────────────────────────────────────────────────
+
+interface Session {
+  playerName: string;
+  playerId: string;
+  roomCode: string;
+}
+
+function saveSession(s: Session) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
+  } catch {
+    // ignore
+  }
+}
+
+function loadSession(): Session | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function clearSession() {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+// ─── Helper: merge server state into our state ────────────────────────────────
+
+function mergeServerState(prev: GameState, data: Partial<GameState> & Record<string, any>): Partial<GameState> {
+  const patch: Partial<GameState> = {};
+
+  if (data.phase !== undefined) patch.serverPhase = data.phase;
+  if (data.serverPhase !== undefined) patch.serverPhase = data.serverPhase;
+  if (Array.isArray(data.players)) patch.players = data.players;
+  if (data.hostSocketId !== undefined) patch.hostSocketId = data.hostSocketId;
+  if (data.currentPlayerIndex !== undefined) patch.currentPlayerIndex = data.currentPlayerIndex;
+  if (data.activeSuit !== undefined) patch.activeSuit = data.activeSuit;
+  if (data.trumpSuit !== undefined) patch.trumpSuit = data.trumpSuit;
+  if (data.trumpRevealed !== undefined) patch.trumpRevealed = data.trumpRevealed;
+  if (data.currentTurn !== undefined) patch.currentTurn = data.currentTurn;
+  if (data.currentRound !== undefined) patch.currentRound = data.currentRound;
+  if (data.currentBatterIndex !== undefined) patch.currentBatterIndex = data.currentBatterIndex;
+  if (Array.isArray(data.trickCards)) patch.trickCards = data.trickCards;
+  if (data.openMode !== undefined) patch.openMode = data.openMode;
+  if (data.doubleOpenMode !== undefined) patch.doubleOpenMode = data.doubleOpenMode;
+  if (data.openDeclaredByTeam !== undefined) patch.openDeclaredByTeam = data.openDeclaredByTeam;
+  if (data.openDeclaredByPlayerId !== undefined) patch.openDeclaredByPlayerId = data.openDeclaredByPlayerId;
+  if (data.openCountForBatter !== undefined) patch.openCountForBatter = data.openCountForBatter;
+  if (data.consecutiveBowlingWins !== undefined) patch.consecutiveBowlingWins = data.consecutiveBowlingWins;
+  if (data.tossWinnerId !== undefined) patch.tossWinnerId = data.tossWinnerId;
+  if (Array.isArray(data.roundScores)) patch.roundScores = data.roundScores;
+  if (Array.isArray(data.totalScores)) patch.totalScores = data.totalScores as [number, number];
+  if (data.pausedForPlayerId !== undefined) patch.pausedForPlayerId = data.pausedForPlayerId;
+
+  return patch;
+}
+
+// ─── Provider ─────────────────────────────────────────────────────────────────
+
+export function GameProvider({ children }: { children: ReactNode }) {
+  const [state, setState] = useState<GameState>(INITIAL_STATE);
+  const socketRef = useRef<Socket | null>(null);
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  const update = useCallback((patch: Partial<GameState>) => {
+    setState((prev) => ({ ...prev, ...patch }));
+  }, []);
+
+  // ── Socket Setup ─────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    const socket = io(SERVER_URL, {
+      transports: ["websocket"],
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+    });
+
+    socketRef.current = socket;
+
+    // ─ Connection ─────────────────────────────────────────────────────────
+
+    socket.on("connect", () => {
+      update({ socketConnected: true });
+
+      // Attempt auto-reconnect if session exists
+      const session = loadSession();
+      if (session) {
+        socket.emit("join_room", {
+          roomCode: session.roomCode,
+          playerName: session.playerName,
+        });
+      }
+    });
+
+    socket.on("disconnect", () => {
+      update({ socketConnected: false });
+    });
+
+    // ─ Room events ────────────────────────────────────────────────────────
+
+    socket.on("room_created", (data: { roomCode: string; playerId: string }) => {
+      const cur = stateRef.current;
+      saveSession({
+        playerName: cur.myPlayerName,
+        playerId: data.playerId,
+        roomCode: data.roomCode,
+      });
+      update({
+        roomCode: data.roomCode,
+        myPlayerId: data.playerId,
+        screen: "lobby",
+        serverPhase: "lobby",
+        isHost: true,
+        lastError: null,
+      });
+    });
+
+    socket.on("room_update", (data: any) => {
+      const cur = stateRef.current;
+      const patch = mergeServerState(cur, data);
+
+      // Determine if host
+      if (data.hostSocketId) {
+        patch.isHost = socket.id === data.hostSocketId;
+      }
+
+      // If we don't have a player ID yet, find ourselves by name
+      if (!cur.myPlayerId && cur.myPlayerName && Array.isArray(data.players)) {
+        const me = data.players.find(
+          (p: any) => p.name === cur.myPlayerName
+        );
+        if (me?.id) {
+          patch.myPlayerId = me.id;
+          // Save session
+          const rc = data.roomCode || cur.roomCode;
+          if (rc) {
+            saveSession({ playerName: cur.myPlayerName, playerId: me.id, roomCode: rc });
+          }
+        }
+      }
+
+      // If we have a roomCode from data, set it
+      if (data.roomCode && !cur.roomCode) {
+        patch.roomCode = data.roomCode;
+      }
+
+      // Screen logic based on phase
+      const phase = data.phase || data.serverPhase || cur.serverPhase;
+      if (phase === "lobby") {
+        if (cur.screen === "home") patch.screen = "lobby";
+        else if (cur.screen !== "game" && cur.screen !== "game_over") patch.screen = "lobby";
+      } else if (phase === "toss") {
+        if (cur.screen !== "select_batter") patch.screen = "toss";
+      } else if (phase === "select_batter" || phase === "dealing") {
+        patch.screen = "select_batter";
+      } else if (
+        phase === "playing" ||
+        phase === "open_window" ||
+        phase === "round_over"
+      ) {
+        if (cur.screen !== "game") patch.screen = "game";
+      } else if (phase === "game_over") {
+        patch.screen = "game_over";
+      }
+
+      // If we don't have a screen set yet (just joined), go to lobby
+      if (cur.screen === "home" && !patch.screen) {
+        patch.screen = "lobby";
+      }
+
+      setState((prev) => ({ ...prev, ...patch, lastError: null }));
+    });
+
+    // ─ Game-specific state update ─────────────────────────────────────────
+
+    socket.on("game_state", (data: any) => {
+      const cur = stateRef.current;
+      const patch = mergeServerState(cur, data);
+
+      const phase = data.phase || data.serverPhase;
+      if (phase) {
+        if (
+          phase === "playing" ||
+          phase === "open_window" ||
+          phase === "round_over"
+        ) {
+          patch.screen = "game";
+        } else if (phase === "game_over") {
+          patch.screen = "game_over";
+        }
+      }
+
+      setState((prev) => ({ ...prev, ...patch }));
+    });
+
+    // ─ Joined room confirmation ───────────────────────────────────────────
+
+    socket.on("joined_room", (data: { roomCode: string; playerId: string; reconnected?: boolean }) => {
+      const cur = stateRef.current;
+      saveSession({
+        playerName: cur.myPlayerName,
+        playerId: data.playerId,
+        roomCode: data.roomCode,
+      });
+      update({
+        roomCode: data.roomCode,
+        myPlayerId: data.playerId,
+        screen: data.reconnected ? cur.screen : "lobby",
+        serverPhase: "lobby",
+        lastError: null,
+      });
+    });
+
+    // ─ Toss ───────────────────────────────────────────────────────────────
+
+    socket.on("toss_result", (data: { winnerPlayerId: string }) => {
+      const cur = stateRef.current;
+      const isWinner = data.winnerPlayerId === cur.myPlayerId;
+      update({
+        tossWinnerId: data.winnerPlayerId,
+        screen: isWinner ? "select_batter" : "toss",
+        serverPhase: "toss",
+      });
+    });
+
+    // ─ Deal hand ──────────────────────────────────────────────────────────
+
+    socket.on("deal_hand", (data: any) => {
+      const hand: Card[] = data.hand || data.cards || [];
+      const patch: Partial<GameState> = {
+        myHand: hand,
+        screen: "game",
+      };
+      // Merge any extra game state that came with deal_hand
+      const extra = mergeServerState(stateRef.current, data);
+      Object.assign(patch, extra);
+      setState((prev) => ({ ...prev, ...patch }));
+    });
+
+    // ─ Trick result ───────────────────────────────────────────────────────
+
+    socket.on("trick_result", (data: { winnerPlayerId: string; winnerPlayerIndex: number; winningCard?: Card }) => {
+      update({
+        lastTrickWinner: {
+          playerId: data.winnerPlayerId,
+          playerIndex: data.winnerPlayerIndex,
+        },
+        trickCards: [],
+        activeSuit: null,
+      });
+    });
+
+    // ─ Round result ───────────────────────────────────────────────────────
+
+    socket.on("round_result", (data: any) => {
+      const patch = mergeServerState(stateRef.current, data);
+      patch.roundResult = data;
+      if (Array.isArray(data.roundScores)) patch.roundScores = data.roundScores;
+      if (Array.isArray(data.totalScores)) patch.totalScores = data.totalScores;
+      setState((prev) => ({ ...prev, ...patch }));
+    });
+
+    // ─ Game over ──────────────────────────────────────────────────────────
+
+    socket.on("game_over", (data: any) => {
+      const patch = mergeServerState(stateRef.current, data);
+      patch.screen = "game_over";
+      patch.serverPhase = "game_over";
+      if (Array.isArray(data.totalScores)) patch.totalScores = data.totalScores;
+      if (Array.isArray(data.roundScores)) patch.roundScores = data.roundScores;
+      clearSession();
+      setState((prev) => ({ ...prev, ...patch }));
+    });
+
+    // ─ Errors ─────────────────────────────────────────────────────────────
+
+    socket.on("error", (data: any) => {
+      const msg = data?.message || data?.errorCode || "An error occurred";
+      // If ROOM_NOT_FOUND or similar, clear session
+      if (data?.errorCode === "ROOM_NOT_FOUND" || data?.errorCode === "ROOM_FULL") {
+        clearSession();
+        update({ lastError: msg, screen: "home" });
+      } else {
+        update({ lastError: msg });
+      }
+    });
+
+    socket.on("action_error", (data: any) => {
+      const msg = data?.message || data?.errorCode || "Action not allowed";
+      update({ lastError: msg });
+    });
+
+    // Catch-all for joined error via room_error event
+    socket.on("room_error", (data: any) => {
+      const msg = data?.message || data?.errorCode || "Room error";
+      clearSession();
+      update({ lastError: msg, screen: "home" });
+    });
+
+    return () => {
+      socket.disconnect();
+      socketRef.current = null;
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Actions ──────────────────────────────────────────────────────────────
+
+  const createRoom = useCallback((playerName: string) => {
+    update({ myPlayerName: playerName, lastError: null });
+    socketRef.current?.emit("create_room", { playerName });
+  }, [update]);
+
+  const joinRoom = useCallback((roomCode: string, playerName: string) => {
+    update({ myPlayerName: playerName, lastError: null });
+    socketRef.current?.emit("join_room", { roomCode: roomCode.toUpperCase().trim(), playerName });
+  }, [update]);
+
+  const startGame = useCallback(() => {
+    const { roomCode } = stateRef.current;
+    if (!roomCode) return;
+    socketRef.current?.emit("start_game", { roomCode });
+  }, []);
+
+  const selectBatter = useCallback((targetPlayerId: string) => {
+    const { roomCode } = stateRef.current;
+    if (!roomCode) return;
+    socketRef.current?.emit("select_batter", { roomCode, targetPlayerId });
+    update({ screen: "toss" });
+  }, [update]);
+
+  const playCard = useCallback((cardId: string) => {
+    const { roomCode, myPlayerId } = stateRef.current;
+    if (!roomCode || !myPlayerId) return;
+    socketRef.current?.emit("game_action", {
+      roomCode,
+      playerId: myPlayerId,
+      action: "play_card",
+      cardId,
+    });
+  }, []);
+
+  const declareOpen = useCallback((trumpSuit: Suit) => {
+    const { roomCode, myPlayerId } = stateRef.current;
+    if (!roomCode || !myPlayerId) return;
+    socketRef.current?.emit("game_action", {
+      roomCode,
+      playerId: myPlayerId,
+      action: "declare_open",
+      trumpSuit,
+    });
+  }, []);
+
+  const declareDoubleOpen = useCallback((trumpSuit: Suit) => {
+    const { roomCode, myPlayerId } = stateRef.current;
+    if (!roomCode || !myPlayerId) return;
+    socketRef.current?.emit("game_action", {
+      roomCode,
+      playerId: myPlayerId,
+      action: "declare_double_open",
+      trumpSuit,
+    });
+  }, []);
+
+  const leaveRoom = useCallback(() => {
+    clearSession();
+    update({ ...INITIAL_STATE, socketConnected: stateRef.current.socketConnected });
+  }, [update]);
+
+  const clearError = useCallback(() => update({ lastError: null }), [update]);
+  const dismissTrickWinner = useCallback(() => update({ lastTrickWinner: null }), [update]);
+  const dismissRoundResult = useCallback(() => update({ roundResult: null }), [update]);
+
+  const value: GameContextValue = {
+    state,
+    createRoom,
+    joinRoom,
+    startGame,
+    selectBatter,
+    playCard,
+    declareOpen,
+    declareDoubleOpen,
+    leaveRoom,
+    clearError,
+    dismissTrickWinner,
+    dismissRoundResult,
+  };
+
+  return <GameContext.Provider value={value}>{children}</GameContext.Provider>;
+}

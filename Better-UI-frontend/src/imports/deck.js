@@ -2,7 +2,7 @@ function createDeck() {
     const suits = ['H', 'D', 'C', 'S'];
     const deck = [];
     for (const suit of suits) {
-        for (let value = 2; value <= 14; value += 1) { //value+=1 ??? WTHHH :/
+        for (let value = 2; value <= 14; value += 1) {
             deck.push({ suit, value, id: `${suit}-${value}` });
         }
     }

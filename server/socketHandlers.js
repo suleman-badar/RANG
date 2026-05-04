@@ -30,15 +30,21 @@ function roomPlayersPublic(room) {
     return room.players.map((p) => ({
         id: p.id,
         name: p.name,
-        index: p.playerIndex,
+        teamIndex: p.teamIndex,
+        playerIndex: p.playerIndex,
         connected: p.connected,
+        handSize: Array.isArray(p.hand) ? p.hand.length : 0,
     }));
 }
 
 function emitRoomUpdate(io, room) {
     io.to(room.roomCode).emit('room_update', {
+        roomCode: room.roomCode,
+        hostSocketId: room.hostSocketId,
+        phase: room.phase,
         players: roomPlayersPublic(room),
-        status: room.phase,
+        tossWinnerId: room.tossWinnerId,
+        currentBatterIndex: room.currentBatterIndex,
     });
 }
 
