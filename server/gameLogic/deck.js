@@ -27,4 +27,4 @@ function deal(deck, numPlayers, cardsEach) {
     return hands;
 }
 
-module.exports = { createDeck, shuffle, deal };
+export { createDeck, shuffle, deal };

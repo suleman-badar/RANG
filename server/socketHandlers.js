@@ -1,24 +1,12 @@
-const {
-    createRoom,
-    joinRoom,
-    getRoom,
-    findPlayerBySocket,
-    findPlayerById,
-    scheduleCleanupIfAllDisconnected,
-    setPausedPhase,
-    consumePausedPhase,
-    getBatterTeamIndex,
-    getBowlingTeamIndex,
-    computeBatterRotationOrder,
-} = require('./rooms');
+import { createRoom, joinRoom, getRoom, findPlayerBySocket, findPlayerById, consumePausedPhase, setPausedPhase, scheduleCleanupIfAllDisconnected, cancelCleanup, getBatterTeamIndex, getBowlingTeamIndex, computeBatterRotationOrder } from './rooms.js';
 
-const { createDeck, shuffle } = require('./gameLogic/deck');
-const { runTossStep } = require('./gameLogic/toss');
-const { validatePlay, resolveTrick, checkConsecutiveWins } = require('./gameLogic/turnEngine');
-const { shouldRevealTrump, revealTrump } = require('./gameLogic/trumpEngine');
-const { canDeclareOpen, executeOpen, canDeclareDoubleOpen, executeDoubleOpen } = require('./gameLogic/openMode');
-const { calculatePoints } = require('./gameLogic/scoring');
-const { getNextBatterIndex, isGameOver } = require('./gameLogic/rotation');
+import { createDeck, shuffle } from './gameLogic/deck.js';
+import { runTossStep } from './gameLogic/toss.js';
+import { validatePlay, resolveTrick, checkConsecutiveWins } from './gameLogic/turnEngine.js';
+import { shouldRevealTrump, revealTrump } from './gameLogic/trumpEngine.js';
+import { canDeclareOpen, executeOpen, canDeclareDoubleOpen, executeDoubleOpen } from './gameLogic/openMode.js';
+import { calculatePoints } from './gameLogic/scoring.js';
+import { getNextBatterIndex, isGameOver } from './gameLogic/rotation.js';
 
 const readySetsByRoom = Object.create(null);
 
@@ -628,4 +616,4 @@ function registerSocketHandlers(io, socket) {
     });
 }
 
-module.exports = { registerSocketHandlers };
+export { registerSocketHandlers };

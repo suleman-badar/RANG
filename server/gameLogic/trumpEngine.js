@@ -1,4 +1,4 @@
-const { getBowlingTeamIndex } = require('../rooms');
+import { getBowlingTeamIndex } from '../rooms.js';
 
 function shouldRevealTrump(room, playerId) {
     if (room.trumpRevealed) return false;
@@ -34,4 +34,4 @@ function revealTrump(room) {
     return hiddenCard;
 }
 
-module.exports = { shouldRevealTrump, revealTrump };
+export { shouldRevealTrump, revealTrump };

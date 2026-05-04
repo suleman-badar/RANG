@@ -6,4 +6,4 @@ function isGameOver(room) {
     return room.battersCompleted >= 4;
 }
 
-module.exports = { getNextBatterIndex, isGameOver };
+export { getNextBatterIndex, isGameOver };

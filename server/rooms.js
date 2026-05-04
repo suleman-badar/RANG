@@ -1,4 +1,4 @@
-const crypto = require('crypto');
+import crypto from 'crypto';
 
 const rooms = Object.create(null);
 const cleanupTimers = Object.create(null);
@@ -208,7 +208,7 @@ function computeBatterRotationOrder(initialBatterIndex) {
     return order;
 }
 
-module.exports = {
+export {
     createRoom,
     joinRoom,
     getRoom,
@@ -221,4 +221,5 @@ module.exports = {
     getBatterTeamIndex,
     getBowlingTeamIndex,
     computeBatterRotationOrder,
+    cancelCleanup,
 };

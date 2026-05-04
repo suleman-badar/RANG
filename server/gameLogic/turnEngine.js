@@ -1,4 +1,4 @@
-const { getBatterTeamIndex, getBowlingTeamIndex } = require('../rooms');
+import { getBatterTeamIndex, getBowlingTeamIndex } from '../rooms.js';
 
 function isTrumpCard(card, trumpSuit) {
     if (!trumpSuit) return false;
@@ -114,7 +114,7 @@ function checkConsecutiveWins(room, trickWinnerTeam, winningCard) {
     return { roundOver: false };
 }
 
-module.exports = {
+export {
     validatePlay,
     resolveTrick,
     isTrumpCard,

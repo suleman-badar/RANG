@@ -1,4 +1,4 @@
-const { shouldRevealTrump, revealTrump } = require('../gameLogic/trumpEngine');
+import { shouldRevealTrump, revealTrump } from '../gameLogic/trumpEngine.js';
 
 function makeRoom() {
     return {

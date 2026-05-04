@@ -1,4 +1,4 @@
-const { validatePlay, resolveTrick, checkConsecutiveWins } = require('../gameLogic/turnEngine');
+import { validatePlay, resolveTrick, checkConsecutiveWins } from '../gameLogic/turnEngine.js';
 
 function makeRoom() {
     return {

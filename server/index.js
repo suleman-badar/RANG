@@ -1,9 +1,9 @@
-const http = require('http');
+import http from 'http';
 
-const express = require('express');
-const { Server } = require('socket.io');
+import express from 'express';
+import { Server } from 'socket.io';
 
-const { registerSocketHandlers } = require('./socketHandlers');
+import { registerSocketHandlers } from './socketHandlers.js';
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3001;
 

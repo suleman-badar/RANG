@@ -1,4 +1,4 @@
-const { createDeck, shuffle } = require('../gameLogic/deck');
+import { createDeck, shuffle } from '../gameLogic/deck.js';
 
 describe('deck', () => {
     test('createDeck() returns exactly 52 cards with no duplicates', () => {

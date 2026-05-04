@@ -43,4 +43,4 @@ function calculatePoints(room, winnerTeam) {
     return { team0Points, team1Points };
 }
 
-module.exports = { calculatePoints };
+export { calculatePoints };

@@ -1,4 +1,4 @@
-const { calculatePoints } = require('../gameLogic/scoring');
+import { calculatePoints } from '../gameLogic/scoring.js';
 
 describe('scoring', () => {
     test('Batting team wins the round (Normal) => +13', () => {

@@ -1,9 +1,13 @@
 /* eslint-disable no-console */
 
-const { spawn } = require('child_process');
-const path = require('path');
+import { spawn } from 'child_process';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-const { io } = require('socket.io-client');
+import { io } from 'socket.io-client';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 function wait(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));

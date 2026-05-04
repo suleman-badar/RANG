@@ -1,4 +1,4 @@
-const { getBatterTeamIndex } = require('../rooms');
+import { getBatterTeamIndex } from '../rooms.js';
 
 function isValidSuit(s) {
     return s === 'H' || s === 'D' || s === 'C' || s === 'S';
@@ -104,7 +104,7 @@ function executeDoubleOpen(room, playerId, trumpSuit) {
     return { ok: true, alphaPlayerId: playerId };
 }
 
-module.exports = {
+export {
     canDeclareOpen,
     executeOpen,
     canDeclareDoubleOpen,

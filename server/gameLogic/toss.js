@@ -19,4 +19,4 @@ function resolveToss(room) {
     return { winnerPlayerId: null, steps: [] };
 }
 
-module.exports = { runTossStep, resolveToss };
+export { runTossStep, resolveToss };

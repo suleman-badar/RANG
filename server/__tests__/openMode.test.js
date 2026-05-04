@@ -1,4 +1,4 @@
-const { canDeclareOpen, executeOpen, canDeclareDoubleOpen } = require('../gameLogic/openMode');
+import { canDeclareOpen, executeOpen, canDeclareDoubleOpen } from '../gameLogic/openMode.js';
 
 function makeRoom() {
     return {
