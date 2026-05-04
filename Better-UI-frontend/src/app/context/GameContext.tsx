@@ -9,7 +9,7 @@ import React, {
 } from "react";
 import { io, Socket } from "socket.io-client";
 
-const SERVER_URL = "http://localhost:3001";
+const SERVER_URL = (import.meta as any).env?.VITE_SERVER_URL || "http://localhost:3001";
 const STORAGE_KEY = "rang_advance_session";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -39,9 +39,63 @@ export interface Player {
 
 export interface RoundScore {
   round: number;
-  winnerTeam: number;
-  team0Points: number;
-  team1Points: number;
+  winnerTeam: 0 | 1;
+  points: number;
+}
+
+function normalizePlayers(rawPlayers: any[]): Player[] {
+  return (rawPlayers || [])
+    .filter(Boolean)
+    .map((p: any) => {
+      const playerIndex =
+        typeof p.playerIndex === "number"
+          ? p.playerIndex
+          : typeof p.index === "number"
+            ? p.index
+            : 0;
+
+      const teamIndex = typeof p.teamIndex === "number" ? p.teamIndex : playerIndex % 2;
+
+      return {
+        id: String(p.id),
+        name: String(p.name ?? ""),
+        teamIndex,
+        playerIndex,
+        connected: Boolean(p.connected),
+        handSize: typeof p.handSize === "number" ? p.handSize : undefined,
+      };
+    })
+    .sort((a, b) => a.playerIndex - b.playerIndex);
+}
+
+function scoresToTuple(scores: any): [number, number] {
+  if (Array.isArray(scores) && scores.length >= 2) {
+    return [Number(scores[0]) || 0, Number(scores[1]) || 0];
+  }
+  if (scores && typeof scores === "object") {
+    return [Number(scores.team0) || 0, Number(scores.team1) || 0];
+  }
+  return [0, 0];
+}
+
+function phaseToScreen(phase: string | undefined, fallback: Screen): Screen {
+  switch (phase) {
+    case "lobby":
+      return "lobby";
+    case "toss":
+      return "toss";
+    case "batter_select":
+      return "select_batter";
+    case "playing":
+    case "open_window":
+    case "round_end":
+    case "waiting_for_reconnect":
+      return "game";
+    case "game_over":
+      return "game_over";
+    default:
+      return fallback;
+  }
 }
 
 export type Screen =
@@ -174,7 +228,7 @@ interface Session {
 
 function saveSession(s: Session) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(s));
   } catch {
     // ignore
   }
@@ -182,7 +236,7 @@ function saveSession(s: Session) {
 
 function loadSession(): Session | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = sessionStorage.getItem(STORAGE_KEY);
     return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
@@ -191,7 +245,7 @@ function loadSession(): Session | null {
 
 function clearSession() {
   try {
-    localStorage.removeItem(STORAGE_KEY);
+    sessionStorage.removeItem(STORAGE_KEY);
   } catch {
     // ignore
   }
@@ -203,8 +257,9 @@ function mergeServerState(prev: GameState, data: Partial<GameState> & Record<str
   const patch: Partial<GameState> = {};
 
   if (data.phase !== undefined) patch.serverPhase = data.phase;
+  if (data.status !== undefined) patch.serverPhase = data.status;
   if (data.serverPhase !== undefined) patch.serverPhase = data.serverPhase;
-  if (Array.isArray(data.players)) patch.players = data.players;
+  if (Array.isArray(data.players)) patch.players = normalizePlayers(data.players);
   if (data.hostSocketId !== undefined) patch.hostSocketId = data.hostSocketId;
   if (data.currentPlayerIndex !== undefined) patch.currentPlayerIndex = data.currentPlayerIndex;
   if (data.activeSuit !== undefined) patch.activeSuit = data.activeSuit;
@@ -222,7 +277,8 @@ function mergeServerState(prev: GameState, data: Partial<GameState> & Record<str
   if (data.consecutiveBowlingWins !== undefined) patch.consecutiveBowlingWins = data.consecutiveBowlingWins;
   if (data.tossWinnerId !== undefined) patch.tossWinnerId = data.tossWinnerId;
   if (Array.isArray(data.roundScores)) patch.roundScores = data.roundScores;
-  if (Array.isArray(data.totalScores)) patch.totalScores = data.totalScores as [number, number];
+  if (data.totalScores !== undefined) patch.totalScores = scoresToTuple(data.totalScores);
+  if (data.scores !== undefined) patch.totalScores = scoresToTuple(data.scores);
   if (data.pausedForPlayerId !== undefined) patch.pausedForPlayerId = data.pausedForPlayerId;
 
   return patch;
@@ -261,9 +317,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
       // Attempt auto-reconnect if session exists
       const session = loadSession();
       if (session) {
+        update({ myPlayerName: session.playerName, roomCode: session.roomCode, lastError: null, screen: "lobby" });
         socket.emit("join_room", {
           roomCode: session.roomCode,
           playerName: session.playerName,
+          playerId: session.playerId,
         });
       }
     });
@@ -274,7 +332,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
     // ─ Room events ────────────────────────────────────────────────────────
 
-    socket.on("room_created", (data: { roomCode: string; playerId: string }) => {
+    socket.on("room_created", (data: { roomCode: string; playerId: string; playerIndex?: number }) => {
       const cur = stateRef.current;
       saveSession({
         playerName: cur.myPlayerName,
@@ -295,6 +353,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const cur = stateRef.current;
       const patch = mergeServerState(cur, data);
 
+      const phase: string | undefined = data.status || data.phase || data.serverPhase || patch.serverPhase || cur.serverPhase;
+      patch.serverPhase = phase || cur.serverPhase;
+
       // Determine if host
       if (data.hostSocketId) {
         patch.isHost = socket.id === data.hostSocketId;
@@ -302,9 +363,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
       // If we don't have a player ID yet, find ourselves by name
       if (!cur.myPlayerId && cur.myPlayerName && Array.isArray(data.players)) {
-        const me = data.players.find(
-          (p: any) => p.name === cur.myPlayerName
-        );
+        const normalized = normalizePlayers(data.players);
+        const me = normalized.find((p) => p.name === cur.myPlayerName);
         if (me?.id) {
           patch.myPlayerId = me.id;
           // Save session
@@ -320,24 +380,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         patch.roomCode = data.roomCode;
       }
 
-      // Screen logic based on phase
-      const phase = data.phase || data.serverPhase || cur.serverPhase;
-      if (phase === "lobby") {
-        if (cur.screen === "home") patch.screen = "lobby";
-        else if (cur.screen !== "game" && cur.screen !== "game_over") patch.screen = "lobby";
-      } else if (phase === "toss") {
-        if (cur.screen !== "select_batter") patch.screen = "toss";
-      } else if (phase === "select_batter" || phase === "dealing") {
-        patch.screen = "select_batter";
-      } else if (
-        phase === "playing" ||
-        phase === "open_window" ||
-        phase === "round_over"
-      ) {
-        if (cur.screen !== "game") patch.screen = "game";
-      } else if (phase === "game_over") {
-        patch.screen = "game_over";
-      }
+      patch.screen = phaseToScreen(phase, cur.screen);
 
       // If we don't have a screen set yet (just joined), go to lobby
       if (cur.screen === "home" && !patch.screen) {
@@ -353,17 +396,16 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const cur = stateRef.current;
       const patch = mergeServerState(cur, data);
 
-      const phase = data.phase || data.serverPhase;
-      if (phase) {
-        if (
-          phase === "playing" ||
-          phase === "open_window" ||
-          phase === "round_over"
-        ) {
-          patch.screen = "game";
-        } else if (phase === "game_over") {
-          patch.screen = "game_over";
-        }
+      const phase: string | undefined = data.phase || data.serverPhase || patch.serverPhase;
+      patch.serverPhase = phase || cur.serverPhase;
+      patch.screen = phaseToScreen(phase, cur.screen);
+
+      if (data.playerCardCounts && typeof data.playerCardCounts === "object") {
+        const counts = data.playerCardCounts as Record<string, number>;
+        patch.players = (patch.players || cur.players).map((p) => ({
+          ...p,
+          handSize: counts[p.id] ?? p.handSize,
+        }));
       }
 
       setState((prev) => ({ ...prev, ...patch }));
@@ -378,13 +420,17 @@ export function GameProvider({ children }: { children: ReactNode }) {
         playerId: data.playerId,
         roomCode: data.roomCode,
       });
-      update({
+
+      const patch: Partial<GameState> = {
         roomCode: data.roomCode,
         myPlayerId: data.playerId,
-        screen: data.reconnected ? cur.screen : "lobby",
-        serverPhase: "lobby",
         lastError: null,
-      });
+      };
+
+      // Only force navigation if we were still on home.
+      if (cur.screen === "home") patch.screen = "lobby";
+
+      update(patch);
     });
 
     // ─ Toss ───────────────────────────────────────────────────────────────
@@ -395,8 +441,19 @@ export function GameProvider({ children }: { children: ReactNode }) {
       update({
         tossWinnerId: data.winnerPlayerId,
         screen: isWinner ? "select_batter" : "toss",
-        serverPhase: "toss",
+        serverPhase: cur.serverPhase,
       });
+    });
+
+    socket.on("trump_revealed", (data: any) => {
+      const patch: Partial<GameState> = {
+        trumpRevealed: true,
+        trumpSuit: data?.trumpSuit ?? null,
+      };
+      if (Array.isArray(data?.batterNewHand)) {
+        patch.myHand = data.batterNewHand;
+      }
+      setState((prev) => ({ ...prev, ...patch }));
     });
 
     // ─ Deal hand ──────────────────────────────────────────────────────────
@@ -415,11 +472,17 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
     // ─ Trick result ───────────────────────────────────────────────────────
 
-    socket.on("trick_result", (data: { winnerPlayerId: string; winnerPlayerIndex: number; winningCard?: Card }) => {
+    socket.on("trick_result", (data: { winnerPlayerId: string; winnerPlayerIndex?: number; winningCard?: Card }) => {
+      const cur = stateRef.current;
+      const winnerIndex =
+        typeof data.winnerPlayerIndex === "number"
+          ? data.winnerPlayerIndex
+          : cur.players.find((p) => p.id === data.winnerPlayerId)?.playerIndex ?? 0;
+
       update({
         lastTrickWinner: {
           playerId: data.winnerPlayerId,
-          playerIndex: data.winnerPlayerIndex,
+          playerIndex: winnerIndex,
         },
         trickCards: [],
         activeSuit: null,
@@ -431,8 +494,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
     socket.on("round_result", (data: any) => {
       const patch = mergeServerState(stateRef.current, data);
       patch.roundResult = data;
+
       if (Array.isArray(data.roundScores)) patch.roundScores = data.roundScores;
-      if (Array.isArray(data.totalScores)) patch.totalScores = data.totalScores;
+      if (data.totalScores !== undefined) patch.totalScores = scoresToTuple(data.totalScores);
+
       setState((prev) => ({ ...prev, ...patch }));
     });
 
@@ -442,7 +507,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const patch = mergeServerState(stateRef.current, data);
       patch.screen = "game_over";
       patch.serverPhase = "game_over";
-      if (Array.isArray(data.totalScores)) patch.totalScores = data.totalScores;
+      if (data.totalScores !== undefined) patch.totalScores = scoresToTuple(data.totalScores);
       if (Array.isArray(data.roundScores)) patch.roundScores = data.roundScores;
       clearSession();
       setState((prev) => ({ ...prev, ...patch }));
@@ -451,9 +516,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
     // ─ Errors ─────────────────────────────────────────────────────────────
 
     socket.on("error", (data: any) => {
-      const msg = data?.message || data?.errorCode || "An error occurred";
+      const msg = data?.message || data?.code || "An error occurred";
       // If ROOM_NOT_FOUND or similar, clear session
-      if (data?.errorCode === "ROOM_NOT_FOUND" || data?.errorCode === "ROOM_FULL") {
+      if (data?.code === "ROOM_NOT_FOUND" || data?.code === "ROOM_FULL") {
         clearSession();
         update({ lastError: msg, screen: "home" });
       } else {
@@ -487,8 +552,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
   }, [update]);
 
   const joinRoom = useCallback((roomCode: string, playerName: string) => {
-    update({ myPlayerName: playerName, lastError: null });
-    socketRef.current?.emit("join_room", { roomCode: roomCode.toUpperCase().trim(), playerName });
+    const rc = roomCode.toUpperCase().trim();
+    update({ myPlayerName: playerName, roomCode: rc, screen: "lobby", lastError: null });
+    socketRef.current?.emit("join_room", { roomCode: rc, playerName });
   }, [update]);
 
   const startGame = useCallback(() => {
@@ -505,36 +571,21 @@ export function GameProvider({ children }: { children: ReactNode }) {
   }, [update]);
 
   const playCard = useCallback((cardId: string) => {
-    const { roomCode, myPlayerId } = stateRef.current;
-    if (!roomCode || !myPlayerId) return;
-    socketRef.current?.emit("game_action", {
-      roomCode,
-      playerId: myPlayerId,
-      action: "play_card",
-      cardId,
-    });
+    const { roomCode } = stateRef.current;
+    if (!roomCode) return;
+    socketRef.current?.emit("play_card", { roomCode, cardId });
   }, []);
 
   const declareOpen = useCallback((trumpSuit: Suit) => {
-    const { roomCode, myPlayerId } = stateRef.current;
-    if (!roomCode || !myPlayerId) return;
-    socketRef.current?.emit("game_action", {
-      roomCode,
-      playerId: myPlayerId,
-      action: "declare_open",
-      trumpSuit,
-    });
+    const { roomCode } = stateRef.current;
+    if (!roomCode) return;
+    socketRef.current?.emit("declare_open", { roomCode, trumpSuit });
   }, []);
 
   const declareDoubleOpen = useCallback((trumpSuit: Suit) => {
-    const { roomCode, myPlayerId } = stateRef.current;
-    if (!roomCode || !myPlayerId) return;
-    socketRef.current?.emit("game_action", {
-      roomCode,
-      playerId: myPlayerId,
-      action: "declare_double_open",
-      trumpSuit,
-    });
+    const { roomCode } = stateRef.current;
+    if (!roomCode) return;
+    socketRef.current?.emit("declare_double_open", { roomCode, trumpSuit });
   }, []);
 
   const leaveRoom = useCallback(() => {
@@ -544,7 +595,13 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
   const clearError = useCallback(() => update({ lastError: null }), [update]);
   const dismissTrickWinner = useCallback(() => update({ lastTrickWinner: null }), [update]);
-  const dismissRoundResult = useCallback(() => update({ roundResult: null }), [update]);
+  const dismissRoundResult = useCallback(() => {
+    const { roomCode } = stateRef.current;
+    if (roomCode) {
+      socketRef.current?.emit("ready_next_round", { roomCode });
+    }
+    update({ roundResult: null });
+  }, [update]);
 
   const value: GameContextValue = {
     state,

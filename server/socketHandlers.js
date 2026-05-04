@@ -71,7 +71,7 @@ function buildTrickCardsForViewer(room, viewerPlayerId) {
         if (!slot.card) return { playerId: slot.playerId, card: null };
         if (room.trumpRevealed) return { playerId: slot.playerId, card: slot.card };
         if (!viewerIsBowling) return { playerId: slot.playerId, card: slot.card };
-        if (slot.hidden) return { playerId: slot.playerId, card: null };
+        if (slot.hidden) return { playerId: slot.playerId, card: null, hidden: true };
         return { playerId: slot.playerId, card: slot.card };
     });
 }
@@ -81,6 +81,9 @@ function emitGameState(io, room) {
         if (!player.connected) continue;
         const payload = {
             phase: room.phase,
+            currentTurn: room.currentTurn,
+            currentRound: room.currentRound,
+            currentBatterIndex: room.currentBatterIndex,
             currentPlayerIndex: room.currentPlayerIndex,
             activeSuit: room.activeSuit,
             trumpRevealed: room.trumpRevealed,
@@ -88,8 +91,11 @@ function emitGameState(io, room) {
             trickCards: buildTrickCardsForViewer(room, player.id),
             openMode: room.openMode,
             doubleOpenMode: room.doubleOpenMode,
+            openDeclaredByTeam: room.openDeclaredByTeam,
+            openDeclaredByPlayerId: room.openDeclaredByPlayerId,
             openCountForBatter: room.openCountForBatter,
             batterRoundsPlayed: room.batterRoundsPlayed,
+            pausedForPlayerId: room.pausedForPlayerId || null,
             scores: { team0: room.totalScores[0], team1: room.totalScores[1] },
             playerCardCounts: playerCardCounts(room),
         };
@@ -195,6 +201,7 @@ function completeRound(io, room, winnerTeam, reason) {
         pointsAwarded: winnerTeam === 0 ? team0Points : team1Points,
         reason,
         totalScores: { team0: room.totalScores[0], team1: room.totalScores[1] },
+        roundScores: room.roundScores,
     });
     emitGameState(io, room);
 }
@@ -216,6 +223,7 @@ function maybeAdvanceToNextRound(io, room) {
         io.to(room.roomCode).emit('game_over', {
             totalScores: { team0: room.totalScores[0], team1: room.totalScores[1] },
             winnerTeam,
+            roundScores: room.roundScores,
         });
         emitGameState(io, room);
         return;
@@ -248,7 +256,7 @@ function registerSocketHandlers(io, socket) {
         emitGameState(io, room);
     });
 
-    socket.on('join_room', ({ roomCode, playerName }) => {
+    socket.on('join_room', ({ roomCode, playerName, playerId }) => {
         if (!roomCode || typeof roomCode !== 'string') {
             emitError(socket, 'ROOM_NOT_FOUND', 'roomCode is required');
             return;
@@ -258,7 +266,7 @@ function registerSocketHandlers(io, socket) {
             return;
         }
 
-        const joined = joinRoom(roomCode.trim().toUpperCase(), playerName.trim(), socket.id);
+        const joined = joinRoom(roomCode.trim().toUpperCase(), playerName.trim(), socket.id, typeof playerId === 'string' ? playerId : null);
         if (joined.errorCode) {
             emitError(socket, joined.errorCode, joined.message || 'Unable to join room');
             return;
@@ -267,6 +275,8 @@ function registerSocketHandlers(io, socket) {
         const { room, player, reconnected } = joined;
         socket.join(room.roomCode);
         socket.data.roomCode = room.roomCode;
+
+        socket.emit('joined_room', { roomCode: room.roomCode, playerId: player.id, reconnected: !!reconnected });
         emitRoomUpdate(io, room);
 
         if (reconnected) {

@@ -78,12 +78,12 @@ export function GameOverScreen() {
                 <div key={i} className="flex items-center justify-between text-sm">
                   <span className="text-gray-500">Round {rs.round ?? i + 1}</span>
                   <div className="flex items-center gap-3">
-                    <span className={`${(rs.team0Points ?? 0) > 0 ? "text-blue-400" : "text-gray-600"}`}>
-                      +{rs.team0Points ?? 0}
+                    <span className={`${rs.winnerTeam === 0 ? "text-blue-400" : "text-gray-600"}`}>
+                      +{rs.winnerTeam === 0 ? (rs.points ?? 0) : 0}
                     </span>
                     <span className="text-gray-700">vs</span>
-                    <span className={`${(rs.team1Points ?? 0) > 0 ? "text-orange-400" : "text-gray-600"}`}>
-                      +{rs.team1Points ?? 0}
+                    <span className={`${rs.winnerTeam === 1 ? "text-orange-400" : "text-gray-600"}`}>
+                      +{rs.winnerTeam === 1 ? (rs.points ?? 0) : 0}
                     </span>
                   </div>
                   {rs.winnerTeam !== undefined && (

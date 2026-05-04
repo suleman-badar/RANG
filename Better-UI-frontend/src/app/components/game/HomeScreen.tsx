@@ -10,7 +10,7 @@ export function HomeScreen() {
   // Pre-fill name from session if available
   useEffect(() => {
     try {
-      const raw = localStorage.getItem("rang_advance_session");
+      const raw = sessionStorage.getItem("rang_advance_session");
       if (raw) {
         const s = JSON.parse(raw);
         if (s.playerName) setPlayerName(s.playerName);

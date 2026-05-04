@@ -144,11 +144,26 @@ function consumePausedPhase(roomCode) {
     return p;
 }
 
-function joinRoom(roomCode, playerName, socketId) {
+function joinRoom(roomCode, playerName, socketId, playerId) {
     const room = rooms[roomCode];
     if (!room) return { errorCode: 'ROOM_NOT_FOUND' };
 
     cancelCleanup(roomCode);
+
+    if (playerId) {
+        const existingById = room.players.find((p) => p.id === playerId);
+        if (!existingById) {
+            return { errorCode: 'INVALID_ACTION', message: 'Unknown playerId for this room.' };
+        }
+        if (existingById.name !== playerName) {
+            return { errorCode: 'INVALID_ACTION', message: 'playerId does not match playerName.' };
+        }
+
+        // "Take over" the seat for this player (useful for tab reloads).
+        existingById.socketId = socketId;
+        existingById.connected = true;
+        return { room, player: existingById, reconnected: true };
+    }
 
     const existingByName = room.players.find((p) => p.name === playerName);
     if (existingByName) {
