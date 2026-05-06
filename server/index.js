@@ -24,7 +24,6 @@ io.on('connection', (socket) => {
 });
 
 httpServer.listen(PORT, () => {
-    // Intentionally minimal log for deployment environments.
     const address = httpServer.address();
     const actualPort = address && typeof address === 'object' ? address.port : PORT;
     console.log(`Rang Advance server listening on ${actualPort}`);
