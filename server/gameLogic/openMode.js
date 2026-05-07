@@ -15,7 +15,7 @@ function canDeclareOpen(room, playerId) {
     if (room.openCountForBatter >= 3) return { valid: false, errorCode: 'INVALID_ACTION' };
     if (player.playerIndex === room.currentBatterIndex) return { valid: false, errorCode: 'INVALID_ACTION' };
 
-    // Only before they have thrown their Turn 1 card.
+    // Only before they have thrown their Turn 1 card
     const slot = room.trickCards.find((t) => t.playerId === playerId);
     if (slot && slot.card) return { valid: false, errorCode: 'INVALID_ACTION' };
 
@@ -49,7 +49,7 @@ function executeOpen(room, playerId, trumpSuit) {
     if (!isValidSuit(trumpSuit)) return { ok: false, errorCode: 'INVALID_ACTION' };
 
     returnCurrentTrickCardsToHands(room);
-    room.openCountForBatter += 1;
+    ++room.openCountForBatter;
 
     // Hidden card is deactivated and returned.
     if (room.hiddenCard) {
