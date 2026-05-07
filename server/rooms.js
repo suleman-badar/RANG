@@ -1,4 +1,4 @@
-import crypto from 'crypto';
+import crypto from 'crypto'; //for random UUID generation
 
 const rooms = {};
 const cleanupTimers = {};
@@ -91,10 +91,12 @@ function createRoom(playerName, socketId) {
 }
 
 function getRoom(roomCode) {
+    console.log(`Getting room ${roomCode}:`, rooms[roomCode]);
     return rooms[roomCode] || null;
 }
 
 function deleteRoom(roomCode) {
+    console.log(`Deleting room ${roomCode}`);
     if (cleanupTimers[roomCode]) {
         clearTimeout(cleanupTimers[roomCode]);
         delete cleanupTimers[roomCode];
@@ -146,17 +148,17 @@ function consumePausedPhase(roomCode) {
 
 function joinRoom(roomCode, playerName, socketId, playerId) {
     const room = rooms[roomCode];
-    if (!room) return { errorCode: 'ROOM_NOT_FOUND' };
+    if (!room) return { errorCode: 'ROOM NOT FOUND' };
 
     cancelCleanup(roomCode);
 
     if (playerId) {
         const existingById = room.players.find((p) => p.id === playerId);
         if (!existingById) {
-            return { errorCode: 'INVALID_ACTION', message: 'Unknown playerId for this room.' };
+            return { errorCode: 'INVALID ACTION', message: 'Unknown playerId for this room.' };
         }
         if (existingById.name !== playerName) {
-            return { errorCode: 'INVALID_ACTION', message: 'playerId does not match playerName.' };
+            return { errorCode: 'INVALID ACTION', message: 'playerId does not match playerName.' };
         }
 
         existingById.socketId = socketId;
@@ -167,7 +169,7 @@ function joinRoom(roomCode, playerName, socketId, playerId) {
     const existingByName = room.players.find((p) => p.name === playerName);
     if (existingByName) {
         if (existingByName.connected) {
-            return { errorCode: 'INVALID_ACTION', message: 'Player name already connected in this room.' };
+            return { errorCode: 'INVALID ACTION', message: 'Player name already connected in this room.' };
         }
 
         existingByName.socketId = socketId;
@@ -175,7 +177,7 @@ function joinRoom(roomCode, playerName, socketId, playerId) {
         return { room, player: existingByName, reconnected: true };
     }
 
-    if (room.players.length >= 4) return { errorCode: 'ROOM_FULL' };
+    if (room.players.length >= 4) return { errorCode: 'ROOM FULL' };
     const newPlayer = createPlayer(playerName, socketId, room.players.length);
     room.players.push(newPlayer);
     return { room, player: newPlayer, reconnected: false };
@@ -200,7 +202,7 @@ function getBowlingTeamIndex(room) {
 function computeBatterRotationOrder(initialBatterIndex) {
     const order = [initialBatterIndex];
     let cur = initialBatterIndex;
-    for (let i = 1; i < 4; i += 1) {
+    for (let i = 1; i < 4; ++i) {
         cur = (cur + 3) % 4;
         order.push(cur);
     }
@@ -222,3 +224,10 @@ export {
     computeBatterRotationOrder,
     cancelCleanup,
 };
+
+
+
+//TODO: Add more logging to understand flow of events better
+//TODO: Use a single room object rather than managing multiple rooms, as we only
+//      need 4 players to join and that's it. No need to generate random room codes and manage multiple rooms.
+//TODO: Remove the reconnecting logic
