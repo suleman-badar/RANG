@@ -1,8 +1,8 @@
 import crypto from 'crypto';
 
-const rooms = Object.create(null);
-const cleanupTimers = Object.create(null);
-const pausedPhaseByRoom = Object.create(null);
+const rooms = {};
+const cleanupTimers = {};
+const pausedPhaseByRoom = {};
 
 function generateRoomCode() {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
