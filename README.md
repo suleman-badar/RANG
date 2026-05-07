@@ -1,90 +1,55 @@
-# RANG (Rang Advance) — Server
+# RANG
 
-This repo currently contains the **server-side** code for a real time 4 player online card game (Rang Advance).
+A real-time 4 player online card game built with **React + TypeScript**, **Node.js**, and **Socket.IO**.
 
-The server is the **only authority** (it validates actions, deals cards, tracks turns, scoring, etc.).
-It uses **Socket.io** for real time gameplay
+The server acts as the **single source of truth** for gameplay, validation, turn management, scoring, and room state.
 
-## What we added so far
+---
 
-### 1) Working Node.js server
+# Architecture
 
-- Location: `server/`
-- Tech: Node.js + Socket.io
-- CORS: allows all origins (`origin: "*"`)
-- Memory only: rooms and game state are stored in RAM (no database)
+## Client (`client/`)
 
-### 2) Game logic (server-side rules)
+Frontend built with:
 
-Inside `server/gameLogic/` we implemented the main rules needed for gameplay:
+- React
+- TypeScript
+- Vite
 
-- Deck creation + shuffle
-- Toss flow (find the first Ace)
-- Batter selection
-- Dealing (including the batter hidden card)
-- Trump reveal rules
-- Open / Double-open rules
-- Trick resolving + turn validation
-- Scoring + batter rotation
+### Key Runtime File
 
-### 3) Real-time Socket.io event handlers
+`GameContext.tsx`
+- Socket connection
+- Event listeners
+- Action methods
+- Client side synchronized game state
 
-All Socket.io events are handled in `server/socketHandlers.js`.
+---
 
-Important notes:
+## Server (`server/`)
 
-- The server sends **filtered game state** so players do not see hidden info they should not know.
-- Basic reconnect support: a player can reconnect by joining the same room with the same `playerName`.
+Backend built with:
 
-### 4) Automated tests (Jest)
+- Node.js
+- Express
+- Socket.IO
 
-Unit tests live in `server/__tests__/`.
+### Responsibilities
 
-Run them with:
+- Room management
+- Real time synchronization
+- Player lifecycle handling
+- Gameplay orchestration
+- Rule validation
 
-```bash
-cd server
-npm test
-```
+### Key Files
 
-### 5) Smoke test (quick end-to-end check)
+| File | Responsibility |
+|---|---|
+| `index.js` | HTTP + Socket.IO setup |
+| `socketHandlers.js` | Main socket event handlers & game flow |
+| `rooms.js` | In-memory room/player management |
+| `server/gameLogic/` | Pure gameplay rules & validation |
 
-We added a simple smoke test that:
+---
 
-1. starts the server on an ephemeral port
-2. connects 4 Socket.io clients
-3. runs: create room → join room → start game → toss → select batter
-4. checks all 4 players receive `deal_hand`
-
-Run it with:
-
-```bash
-cd server
-npm run smoke
-```
-
-## How to run locally
-
-### Install
-
-```bash
-cd server
-npm install
-```
-
-### Start
-
-```bash
-cd server
-npm start
-```
-
-By default the server uses port `3001`.
-You can set a different port using `PORT`.
-
-### Dev mode (auto restart)
-
-```bash
-cd server
-npm run dev
-```
