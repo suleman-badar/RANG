@@ -8,7 +8,6 @@ import { registerSocketHandlers } from './socketHandlers.js';
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3001;
 
 const app = express();
-app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
 const httpServer = http.createServer(app);
 

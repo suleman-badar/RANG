@@ -26,7 +26,7 @@ function revealTrump(room) {
     batter.hand.push(hiddenCard);
     room.hiddenCard = null;
 
-    // Previously hidden off-suit batting discards are now visible.
+    // Previously hidden off suit batting discards are also visible now
     for (const slot of room.trickCards) {
         if (slot) slot.hidden = false;
     }

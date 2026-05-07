@@ -112,6 +112,7 @@ function cancelCleanup(roomCode) {
     }
 }
 
+//delete room if all players are disconnected for 30 minutes or immediately if game is already over
 function scheduleCleanupIfAllDisconnected(room) {
     const roomCode = room.roomCode;
     const allDisconnected = room.players.length > 0 && room.players.every((p) => !p.connected);
@@ -120,7 +121,6 @@ function scheduleCleanupIfAllDisconnected(room) {
         return;
     }
 
-    // Immediate cleanup once game is over AND all players have left
     if (room.phase === 'game_over') {
         deleteRoom(roomCode);
         return;
@@ -161,7 +161,6 @@ function joinRoom(roomCode, playerName, socketId, playerId) {
             return { errorCode: 'INVALID ACTION', message: 'playerId does not match playerName.' };
         }
 
-        // "Take over" the seat for this player (useful for tab reloads).
         existingById.socketId = socketId;
         existingById.connected = true;
         return { room, player: existingById, reconnected: true };
