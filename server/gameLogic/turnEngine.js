@@ -55,7 +55,7 @@ function resolveTrick(room) {
         // Same category (both trump or both not trump)
         if (!cIsTrump && c.suit !== activeSuit) continue;
         if (!bestIsTrump && best.card.suit !== activeSuit) {
-            // Shouldn't happen; safety.
+            // Shouldn't happen
             best = entry;
             continue;
         }
@@ -86,7 +86,7 @@ function checkConsecutiveWins(room, trickWinnerTeam, winningCard) {
 
     const isAceWin = winningCard && winningCard.value === 14;
 
-    // In open/double-open: Turn 1 is excluded from consecutive tracking.
+    // In open/double open: Turn 1 is excluded from consecutive tracking
     if ((room.openMode || room.doubleOpenMode) && room.currentTurn === 1) {
         room.consecutiveBowlingWins = 0;
         room.lastTrickWinnerIndex = null;
