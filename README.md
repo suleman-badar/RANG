@@ -1,8 +1,8 @@
-# RANG (Rang Advance) — Server
+# RANG
 
-This repo currently contains the **server-side** code for a real time 4 player online card game (Rang Advance).
+This repo currently contains the **server-side** code for a real time 4 player online card game
 
-The server is the **only authority** (it validates actions, deals cards, tracks turns, scoring, etc.).
+The server is the **only authority** (it validates actions, deals cards, tracks turns, scoring, etc.)
 It uses **Socket.io** for real time gameplay
 
 ## What we added so far
