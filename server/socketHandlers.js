@@ -134,7 +134,7 @@ function dealForRound(room) {
         room.players[seat].hand.push(room.deck.shift());
     }
 
-    // Batter's 3rd card dealt is hidden (index 2 in hand array).
+    // Batter's 3rd card dealt is hidden
     const batter = room.players[room.currentBatterIndex];
     room.hiddenCard = batter.hand[2];
     batter.hand.splice(2, 1);
@@ -279,20 +279,20 @@ function registerSocketHandlers(io, socket) {
 
         socket.emit('joined_room', { roomCode: room.roomCode, playerId: player.id, reconnected: !!reconnected });
         const payload = roomUpdatePayload(room);
-        // Ensure the joining socket gets the update even if room join is not applied yet.
+        // Ensure the joining socket gets the update even if room join is not applied yet
         socket.emit('room_update', payload);
         io.to(room.roomCode).except(socket.id).emit('room_update', payload);
 
         if (reconnected) {
             io.to(room.roomCode).except(socket.id).emit('player_reconnected', { playerId: player.id });
 
-            // Re-send private hand.
+            // Resend private hand
             io.to(player.socketId).emit('deal_hand', {
                 hand: player.hand,
                 isHiddenBatter: isHiddenBatterFor(room, player),
             });
 
-            // Restore phase if we were waiting.
+            // Restore phase if we were waiting
             if (room.phase === 'waiting_for_reconnect' && room.pausedForPlayerId === player.id) {
                 const prev = consumePausedPhase(room.roomCode);
                 room.phase = prev || 'playing';
@@ -324,7 +324,7 @@ function registerSocketHandlers(io, socket) {
         room.tossCards = [];
         room.tossWinnerId = null;
 
-        // Deal publicly until first Ace.
+        // Deal publicly until first Ace
         while (room.tossDeck.length > 0) {
             const step = runTossStep(room);
             io.to(room.roomCode).emit('toss_card', { card: step.card, recipientPlayerId: step.recipientPlayerId });
@@ -401,7 +401,7 @@ function registerSocketHandlers(io, socket) {
             return;
         }
 
-        // Re-deal to same batter.
+        // Redeal to same batter.
         dealForRound(room);
         emitDealHands(io, room);
         emitGameState(io, room);
@@ -488,7 +488,7 @@ function registerSocketHandlers(io, socket) {
             return;
         }
 
-        // Turn + card + suit validation.
+        // Turn + card + suit validation
         const check = validatePlay(room, player.id, cardId);
         if (!check.valid) {
             emitError(socket, check.errorCode, 'Invalid play');
@@ -499,7 +499,7 @@ function registerSocketHandlers(io, socket) {
         const cardIdx = player.hand.findIndex((c) => c.id === cardId);
         const card = player.hand[cardIdx];
 
-        // Trump reveal trigger for bowling team when they cannot follow.
+        // Trump reveal trigger for bowling team when they cannot follow
         if (room.activeSuit && card.suit !== room.activeSuit) {
             const hasActiveSuit = player.hand.some((c) => c.suit === room.activeSuit);
             if (!hasActiveSuit && shouldRevealTrump(room, player.id)) {
@@ -511,7 +511,7 @@ function registerSocketHandlers(io, socket) {
             }
         }
 
-        // Apply play.
+        // Apply play
         player.hand.splice(cardIdx, 1);
         if (!room.activeSuit) room.activeSuit = card.suit;
 
@@ -522,7 +522,7 @@ function registerSocketHandlers(io, socket) {
         slot.card = card;
         slot.hidden = hideFromBowling;
 
-        // Advance to next seat within the trick.
+        // Advance to next seat within the trick
         room.currentPlayerIndex = (room.currentPlayerIndex + 1) % 4;
 
         emitGameState(io, room);
@@ -530,7 +530,7 @@ function registerSocketHandlers(io, socket) {
         const trick = resolveTrick(room);
         if (!trick) return;
 
-        // Determine winner & broadcast full trick.
+        // Determine winner & broadcast full trick
         const trickCards = room.trickCards.map((t) => ({ playerId: t.playerId, card: t.card }));
         const winner = room.players.find((p) => p.id === trick.winnerPlayerId);
         const winnerTeam = winner ? winner.teamIndex : 0;
@@ -546,7 +546,7 @@ function registerSocketHandlers(io, socket) {
             consecutiveBowlingWins: room.consecutiveBowlingWins,
         });
 
-        // Round completion rules.
+        // Round completion rules
         const battingTeamIndex = getBatterTeamIndex(room);
         const alphaTeam = room.openMode || room.doubleOpenMode ? room.openDeclaredByTeam : null;
         const defaultWinnerNormal = battingTeamIndex;
@@ -566,7 +566,7 @@ function registerSocketHandlers(io, socket) {
             return;
         }
 
-        // Continue to next turn.
+        // Continue to next turn
         room.currentTurn += 1;
         room.activeSuit = null;
         initTrickCards(room);
@@ -622,7 +622,7 @@ function registerSocketHandlers(io, socket) {
             return;
         }
 
-        // Fallback (should be rare): scan rooms this socket was in.
+        // Fallback: scan rooms this socket was in
         const roomCodes = Array.from(socket.rooms).filter((r) => r !== socket.id);
         for (const roomCode of roomCodes) {
             const r = getRoom(roomCode);
