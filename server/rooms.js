@@ -91,12 +91,12 @@ function createRoom(playerName, socketId) {
 }
 
 function getRoom(roomCode) {
-    console.log(`Getting room ${roomCode}:`, rooms[roomCode]);
+    // console.log(`Getting room ${roomCode}:`, rooms[roomCode]);
     return rooms[roomCode] || null;
 }
 
 function deleteRoom(roomCode) {
-    console.log(`Deleting room ${roomCode}`);
+    // console.log(`Deleting room ${roomCode}`);
     if (cleanupTimers[roomCode]) {
         clearTimeout(cleanupTimers[roomCode]);
         delete cleanupTimers[roomCode];
