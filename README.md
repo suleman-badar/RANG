@@ -1,18 +1,17 @@
 # RANG (Rang Advance) — Server
 
-This repo currently contains the **server-side** code for a real-time 4-player online card game (Rang Advance).
+This repo currently contains the **server-side** code for a real time 4 player online card game (Rang Advance).
 
 The server is the **only authority** (it validates actions, deals cards, tracks turns, scoring, etc.).
-It uses **Socket.io** for real-time gameplay and **Express** only for a small HTTP health endpoint.
+It uses **Socket.io** for real time gameplay
 
 ## What we added so far
 
 ### 1) Working Node.js server
 
 - Location: `server/`
-- Tech: Node.js + Express + Socket.io
+- Tech: Node.js + Socket.io
 - CORS: allows all origins (`origin: "*"`)
-- HTTP endpoint: `GET /health` returns `{ "status": "ok" }`
 - Memory only: rooms and game state are stored in RAM (no database)
 
 ### 2) Game logic (server-side rules)
@@ -89,14 +88,3 @@ You can set a different port using `PORT`.
 cd server
 npm run dev
 ```
-
-## Deploy (Railway / Render)
-
-This server is deploy-friendly.
-
-Typical settings:
-
-- Root directory: `server`
-- Build command: `npm install`
-- Start command: `npm start`
-- Environment: set `PORT` if your platform requires it (most do it automatically)
