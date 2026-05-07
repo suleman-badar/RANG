@@ -151,9 +151,16 @@ export interface GameState {
 
   // UI feedback
   lastError: string | null;
+  lastErrorCode: string | null;
   lastTrickWinner: { playerId: string; playerIndex: number } | null;
   roundResult: { winnerTeam: number; scores?: any } | null;
   pausedForPlayerId: string | null;
+
+  // Toss feed (optional UI)
+  lastTossCard: { card: Card; recipientPlayerId: string } | null;
+
+  // Hidden batter card indicator
+  isHiddenBatter: boolean;
 }
 
 // ─── Context ──────────────────────────────────────────────────────────────────
@@ -168,6 +175,7 @@ interface GameContextValue {
   playCard: (cardId: string) => void;
   declareOpen: (trumpSuit: Suit) => void;
   declareDoubleOpen: (trumpSuit: Suit) => void;
+  requestReshuffle: () => void;
   leaveRoom: () => void;
   clearError: () => void;
   dismissTrickWinner: () => void;
@@ -213,9 +221,12 @@ const INITIAL_STATE: GameState = {
   roundScores: [],
   totalScores: [0, 0],
   lastError: null,
+  lastErrorCode: null,
   lastTrickWinner: null,
   roundResult: null,
   pausedForPlayerId: null,
+  lastTossCard: null,
+  isHiddenBatter: false,
 };
 
 // ─── Session Persistence ──────────────────────────────────────────────────────
@@ -292,6 +303,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const stateRef = useRef(state);
   stateRef.current = state;
 
+  // Tracks the card we just optimistically removed so we can restore it on server rejection.
+  const pendingPlayRef = useRef<Card | null>(null);
+
   const update = useCallback((patch: Partial<GameState>) => {
     setState((prev) => ({ ...prev, ...patch }));
   }, []);
@@ -317,7 +331,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       // Attempt auto-reconnect if session exists
       const session = loadSession();
       if (session) {
-        update({ myPlayerName: session.playerName, roomCode: session.roomCode, lastError: null, screen: "lobby" });
+        update({ myPlayerName: session.playerName, roomCode: session.roomCode, lastError: null, lastErrorCode: null, screen: "lobby" });
         socket.emit("join_room", {
           roomCode: session.roomCode,
           playerName: session.playerName,
@@ -346,6 +360,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         serverPhase: "lobby",
         isHost: true,
         lastError: null,
+        lastErrorCode: null,
       });
     });
 
@@ -387,7 +402,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         patch.screen = "lobby";
       }
 
-      setState((prev) => ({ ...prev, ...patch, lastError: null }));
+      setState((prev) => ({ ...prev, ...patch, lastError: null, lastErrorCode: null }));
     });
 
     // ─ Game-specific state update ─────────────────────────────────────────
@@ -408,6 +423,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
         }));
       }
 
+      // Confirm the pending play was accepted — no need to restore.
+      pendingPlayRef.current = null;
+
       setState((prev) => ({ ...prev, ...patch }));
     });
 
@@ -425,6 +443,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         roomCode: data.roomCode,
         myPlayerId: data.playerId,
         lastError: null,
+        lastErrorCode: null,
       };
 
       // Only force navigation if we were still on home.
@@ -435,13 +454,43 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
     // ─ Toss ───────────────────────────────────────────────────────────────
 
+    socket.on("toss_card", (data: any) => {
+      // Server emits during start_game before toss_result; use this to navigate into toss UI.
+      const cur = stateRef.current;
+      const patch: Partial<GameState> = {
+        lastTossCard: data?.card && data?.recipientPlayerId ? { card: data.card, recipientPlayerId: data.recipientPlayerId } : cur.lastTossCard,
+      };
+      if (cur.screen === "lobby" || cur.screen === "home") {
+        patch.screen = "toss";
+        patch.serverPhase = "toss";
+      }
+      setState((prev) => ({ ...prev, ...patch }));
+    });
+
     socket.on("toss_result", (data: { winnerPlayerId: string }) => {
       const cur = stateRef.current;
       const isWinner = data.winnerPlayerId === cur.myPlayerId;
       update({
         tossWinnerId: data.winnerPlayerId,
         screen: isWinner ? "select_batter" : "toss",
-        serverPhase: cur.serverPhase,
+        serverPhase: "batter_select",
+        lastTossCard: null,
+      });
+    });
+
+    socket.on("player_disconnected", (data: { playerId: string }) => {
+      const cur = stateRef.current;
+      if (!data?.playerId) return;
+      update({
+        players: cur.players.map((p) => (p.id === data.playerId ? { ...p, connected: false } : p)),
+      });
+    });
+
+    socket.on("player_reconnected", (data: { playerId: string }) => {
+      const cur = stateRef.current;
+      if (!data?.playerId) return;
+      update({
+        players: cur.players.map((p) => (p.id === data.playerId ? { ...p, connected: true } : p)),
       });
     });
 
@@ -449,6 +498,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const patch: Partial<GameState> = {
         trumpRevealed: true,
         trumpSuit: data?.trumpSuit ?? null,
+        // Hidden card has been revealed — remove the face-down placeholder
+        isHiddenBatter: false,
       };
       if (Array.isArray(data?.batterNewHand)) {
         patch.myHand = data.batterNewHand;
@@ -463,6 +514,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const patch: Partial<GameState> = {
         myHand: hand,
         screen: "game",
+        // Server tells this player whether they are the hidden batter
+        isHiddenBatter: Boolean(data.isHiddenBatter),
       };
       // Merge any extra game state that came with deal_hand
       const extra = mergeServerState(stateRef.current, data);
@@ -484,6 +537,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
           playerId: data.winnerPlayerId,
           playerIndex: winnerIndex,
         },
+        consecutiveBowlingWins: typeof (data as any)?.consecutiveBowlingWins === "number" ? (data as any).consecutiveBowlingWins : cur.consecutiveBowlingWins,
         trickCards: [],
         activeSuit: null,
       });
@@ -517,25 +571,42 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
     socket.on("error", (data: any) => {
       const msg = data?.message || data?.code || "An error occurred";
+
+      // If the server rejected a card play, restore the card to the hand.
+      if (pendingPlayRef.current) {
+        const rejected = pendingPlayRef.current;
+        pendingPlayRef.current = null;
+        setState((prev) => ({
+          ...prev,
+          // Put the card back only if it's not already in hand (safety check).
+          myHand: prev.myHand.some((c) => c.id === rejected.id)
+            ? prev.myHand
+            : [rejected, ...prev.myHand],
+          lastError: msg,
+          lastErrorCode: data?.code ?? null,
+        }));
+        return;
+      }
+
       // If ROOM_NOT_FOUND or similar, clear session
       if (data?.code === "ROOM_NOT_FOUND" || data?.code === "ROOM_FULL") {
         clearSession();
-        update({ lastError: msg, screen: "home" });
+        update({ lastError: msg, lastErrorCode: data?.code ?? null, screen: "home" });
       } else {
-        update({ lastError: msg });
+        update({ lastError: msg, lastErrorCode: data?.code ?? null });
       }
     });
 
     socket.on("action_error", (data: any) => {
       const msg = data?.message || data?.errorCode || "Action not allowed";
-      update({ lastError: msg });
+      update({ lastError: msg, lastErrorCode: data?.errorCode ?? null });
     });
 
     // Catch-all for joined error via room_error event
     socket.on("room_error", (data: any) => {
       const msg = data?.message || data?.errorCode || "Room error";
       clearSession();
-      update({ lastError: msg, screen: "home" });
+      update({ lastError: msg, lastErrorCode: data?.errorCode ?? null, screen: "home" });
     });
 
     return () => {
@@ -547,13 +618,13 @@ export function GameProvider({ children }: { children: ReactNode }) {
   // ── Actions ──────────────────────────────────────────────────────────────
 
   const createRoom = useCallback((playerName: string) => {
-    update({ myPlayerName: playerName, lastError: null });
+    update({ myPlayerName: playerName, lastError: null, lastErrorCode: null });
     socketRef.current?.emit("create_room", { playerName });
   }, [update]);
 
   const joinRoom = useCallback((roomCode: string, playerName: string) => {
     const rc = roomCode.toUpperCase().trim();
-    update({ myPlayerName: playerName, roomCode: rc, screen: "lobby", lastError: null });
+    update({ myPlayerName: playerName, roomCode: rc, screen: "lobby", lastError: null, lastErrorCode: null });
     socketRef.current?.emit("join_room", { roomCode: rc, playerName });
   }, [update]);
 
@@ -571,10 +642,19 @@ export function GameProvider({ children }: { children: ReactNode }) {
   }, [update]);
 
   const playCard = useCallback((cardId: string) => {
-    const { roomCode } = stateRef.current;
+    const { roomCode, myHand } = stateRef.current;
     if (!roomCode) return;
+
+    // Find the card object before removing it so we can restore on rejection.
+    const card = myHand.find((c) => c.id === cardId);
+    if (!card) return; // Card not in hand — don't even emit.
+
+    // Optimistically remove from hand. If server rejects, the error handler restores it.
+    pendingPlayRef.current = card;
+    update({ myHand: myHand.filter((c) => c.id !== cardId) });
+
     socketRef.current?.emit("play_card", { roomCode, cardId });
-  }, []);
+  }, [update]);
 
   const declareOpen = useCallback((trumpSuit: Suit) => {
     const { roomCode } = stateRef.current;
@@ -588,12 +668,19 @@ export function GameProvider({ children }: { children: ReactNode }) {
     socketRef.current?.emit("declare_double_open", { roomCode, trumpSuit });
   }, []);
 
+  const requestReshuffle = useCallback(() => {
+    const { roomCode } = stateRef.current;
+    if (!roomCode) return;
+    update({ lastError: null, lastErrorCode: null });
+    socketRef.current?.emit("request_reshuffle", { roomCode });
+  }, [update]);
+
   const leaveRoom = useCallback(() => {
     clearSession();
     update({ ...INITIAL_STATE, socketConnected: stateRef.current.socketConnected });
   }, [update]);
 
-  const clearError = useCallback(() => update({ lastError: null }), [update]);
+  const clearError = useCallback(() => update({ lastError: null, lastErrorCode: null }), [update]);
   const dismissTrickWinner = useCallback(() => update({ lastTrickWinner: null }), [update]);
   const dismissRoundResult = useCallback(() => {
     const { roomCode } = stateRef.current;
@@ -612,6 +699,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     playCard,
     declareOpen,
     declareDoubleOpen,
+    requestReshuffle,
     leaveRoom,
     clearError,
     dismissTrickWinner,

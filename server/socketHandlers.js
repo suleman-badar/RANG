@@ -25,15 +25,19 @@ function roomPlayersPublic(room) {
     }));
 }
 
-function emitRoomUpdate(io, room) {
-    io.to(room.roomCode).emit('room_update', {
+function roomUpdatePayload(room) {
+    return {
         roomCode: room.roomCode,
         hostSocketId: room.hostSocketId,
         phase: room.phase,
         players: roomPlayersPublic(room),
         tossWinnerId: room.tossWinnerId,
         currentBatterIndex: room.currentBatterIndex,
-    });
+    };
+}
+
+function emitRoomUpdate(io, room) {
+    io.to(room.roomCode).emit('room_update', roomUpdatePayload(room));
 }
 
 function playerCardCounts(room) {
@@ -68,6 +72,7 @@ function emitGameState(io, room) {
     for (const player of room.players) {
         if (!player.connected) continue;
         const payload = {
+            players: roomPlayersPublic(room),
             phase: room.phase,
             currentTurn: room.currentTurn,
             currentRound: room.currentRound,
@@ -76,6 +81,7 @@ function emitGameState(io, room) {
             activeSuit: room.activeSuit,
             trumpRevealed: room.trumpRevealed,
             trumpSuit: room.trumpRevealed ? room.trumpSuit : null,
+            tossWinnerId: room.tossWinnerId,
             trickCards: buildTrickCardsForViewer(room, player.id),
             openMode: room.openMode,
             doubleOpenMode: room.doubleOpenMode,
@@ -160,9 +166,14 @@ function isReshuffleWindowOpen(room) {
 }
 
 function canReshufflePlayer(player, room) {
-    if (player.playerIndex === room.currentBatterIndex) return { ok: false, code: 'RESHUFFLE_NOT_ELIGIBLE' };
-    const hasFace = player.hand.some((c) => c.value === 11 || c.value === 12 || c.value === 13);
-    if (hasFace) return { ok: false, code: 'RESHUFFLE_NOT_ELIGIBLE' };
+    const relaxReshuffleRule = process.env.RANG_DEV_ALLOW_RESHUFFLE === '1';
+    if (!relaxReshuffleRule) {
+        if (player.playerIndex === room.currentBatterIndex) return { ok: false, code: 'RESHUFFLE_NOT_ELIGIBLE' };
+        const hasFace = player.hand.some((c) => c.value === 11 || c.value === 12 || c.value === 13);
+        if (hasFace) return { ok: false, code: 'RESHUFFLE_NOT_ELIGIBLE' };
+        // Players can only reshuffle on their turn
+        if (player.playerIndex !== room.currentPlayerIndex) return { ok: false, code: 'WRONG_TURN' };
+    }
     if (!isReshuffleWindowOpen(room)) return { ok: false, code: 'RESHUFFLE_NOT_ELIGIBLE' };
     if (room.openMode || room.doubleOpenMode) return { ok: false, code: 'RESHUFFLE_NOT_ELIGIBLE' };
     return { ok: true };
@@ -239,7 +250,9 @@ function registerSocketHandlers(io, socket) {
         socket.emit('room_created', { roomCode, playerId: player.id, playerIndex: player.playerIndex });
 
         const room = getRoom(roomCode);
-        emitRoomUpdate(io, room);
+        const payload = roomUpdatePayload(room);
+        socket.emit('room_update', payload);
+        io.to(room.roomCode).except(socket.id).emit('room_update', payload);
         initTrickCards(room);
         emitGameState(io, room);
     });
@@ -265,7 +278,10 @@ function registerSocketHandlers(io, socket) {
         socket.data.roomCode = room.roomCode;
 
         socket.emit('joined_room', { roomCode: room.roomCode, playerId: player.id, reconnected: !!reconnected });
-        emitRoomUpdate(io, room);
+        const payload = roomUpdatePayload(room);
+        // Ensure the joining socket gets the update even if room join is not applied yet.
+        socket.emit('room_update', payload);
+        io.to(room.roomCode).except(socket.id).emit('room_update', payload);
 
         if (reconnected) {
             io.to(room.roomCode).except(socket.id).emit('player_reconnected', { playerId: player.id });
@@ -370,6 +386,10 @@ function registerSocketHandlers(io, socket) {
             emitError(socket, 'ROOM_NOT_FOUND', 'Room not found');
             return;
         }
+        if (room.players.length !== 4) {
+            emitError(socket, 'INVALID_ACTION', 'Need exactly 4 players to reshuffle');
+            return;
+        }
         const player = findPlayerBySocket(room, socket.id);
         if (!player) {
             emitError(socket, 'INVALID_ACTION', 'Player not in room');
@@ -472,6 +492,7 @@ function registerSocketHandlers(io, socket) {
         const check = validatePlay(room, player.id, cardId);
         if (!check.valid) {
             emitError(socket, check.errorCode, 'Invalid play');
+            console.log(`Invalid play attempt by player ${player.id} in room ${room.roomCode}: ${check.errorCode}`);
             return;
         }
 

@@ -3,7 +3,7 @@ import { useGame } from "../../context/GameContext";
 
 export function TossScreen() {
   const { state } = useGame();
-  const { players, tossWinnerId, serverPhase } = state;
+  const { players, tossWinnerId, lastTossCard } = state;
 
   const winner = players.find((p) => p.id === tossWinnerId);
   const isTossing = !tossWinnerId;
@@ -18,6 +18,16 @@ export function TossScreen() {
           <>
             <h2 className="text-2xl text-white mb-2">Tossing Cards...</h2>
             <p className="text-green-400 text-sm">Determining who picks the batter</p>
+
+            {lastTossCard && (
+              <p className="text-gray-300 text-sm mt-3">
+                Last card: <span className="text-white font-medium">{String(lastTossCard.card?.id ?? "?")}</span> to{" "}
+                <span className="text-white font-medium">
+                  {players.find((p) => p.id === lastTossCard.recipientPlayerId)?.name ?? "?"}
+                </span>
+              </p>
+            )}
+
             <div className="mt-8 flex justify-center gap-2">
               {[0, 1, 2].map((i) => (
                 <div

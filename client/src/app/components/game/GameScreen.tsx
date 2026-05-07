@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useGame, Card, Suit, Player } from "../../context/GameContext";
-import { PlayingCard, CardBack, SuitSelector, getSuitSymbol, isRedSuit } from "./PlayingCard";
+import { PlayingCard, CardBack, SuitSelector, getSuitSymbol, getSuitName, isRedSuit } from "./PlayingCard";
 
 // ─── Main Game Screen ─────────────────────────────────────────────────────────
 
@@ -10,6 +10,7 @@ export function GameScreen() {
     playCard,
     declareOpen,
     declareDoubleOpen,
+    requestReshuffle,
     dismissTrickWinner,
     dismissRoundResult,
     clearError,
@@ -37,12 +38,15 @@ export function GameScreen() {
     lastTrickWinner,
     roundResult,
     lastError,
+    lastErrorCode,
     serverPhase,
     pausedForPlayerId,
   } = state;
 
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [showSuitSelector, setShowSuitSelector] = useState<"open" | "doubleOpen" | null>(null);
+
+  const relaxReshuffleRule = (import.meta as any).env?.VITE_DEV_ALLOW_RESHUFFLE === "1";
 
   // Find my player object
   const me = players.find((p) => p.id === myPlayerId);
@@ -104,9 +108,47 @@ export function GameScreen() {
     !doubleOpenMode &&
     me?.teamIndex !== openDeclaredByTeam;
 
+  const hasFaceCardsClient = myHand.some((c) => c.value === 11 || c.value === 12 || c.value === 13);
+
+  const showReshuffleButtonClient =
+    currentTurn === 1 &&
+    !openMode &&
+    !doubleOpenMode;
+
+  const canRequestReshuffleClient =
+    showReshuffleButtonClient &&
+    isMyTurn &&
+    (relaxReshuffleRule ? true : myPlayerIndex !== currentBatterIndex) &&
+    (relaxReshuffleRule ? true : !hasFaceCardsClient);
+
+  const reshuffleDisabledReason =
+    !showReshuffleButtonClient
+      ? null
+      : !isMyTurn
+        ? "Not your turn"
+        : !relaxReshuffleRule && myPlayerIndex === currentBatterIndex
+          ? "Batter cannot reshuffle"
+          : !relaxReshuffleRule && hasFaceCardsClient
+            ? "Need no J / Q / K to reshuffle"
+            : null;
+
+  const reshuffleInlineError =
+    canRequestReshuffleClient &&
+    (lastErrorCode === "RESHUFFLE_NOT_ELIGIBLE" || lastErrorCode === "WRONG_TURN")
+      ? lastErrorCode === "WRONG_TURN"
+        ? "Not your turn"
+        : "Not eligible for reshuffle"
+      : null;
+
   // Batter team indicator
   const batterTeam = currentBatterIndex % 2;
   const getBatterTeamLabel = () => `Team ${batterTeam + 1} Bats`;
+
+  // Whether the hidden card placeholder should be visible for a given player index.
+  // Any player (me or opponent) whose playerIndex === currentBatterIndex AND trump
+  // hasn't been revealed yet should show the face-down card badge.
+  const isBatterHiddenActive = !trumpRevealed;
+  const amIBatter = myPlayerIndex === currentBatterIndex;
 
   const pausedPlayer = pausedForPlayerId
     ? players.find((p) => p.id === pausedForPlayerId)
@@ -161,6 +203,7 @@ export function GameScreen() {
               isCurrentTurn={topPlayer.playerIndex === currentPlayerIndex}
               trickCard={trickCards.find((tc) => tc.playerId === topPlayer.id)}
               position="top"
+              showHiddenCard={isBatterHiddenActive && topPlayer.playerIndex === currentBatterIndex}
             />
           )}
         </div>
@@ -175,6 +218,7 @@ export function GameScreen() {
                 isCurrentTurn={leftPlayer.playerIndex === currentPlayerIndex}
                 trickCard={trickCards.find((tc) => tc.playerId === leftPlayer.id)}
                 position="left"
+                showHiddenCard={isBatterHiddenActive && leftPlayer.playerIndex === currentBatterIndex}
               />
             )}
           </div>
@@ -198,13 +242,14 @@ export function GameScreen() {
                 isCurrentTurn={rightPlayer.playerIndex === currentPlayerIndex}
                 trickCard={trickCards.find((tc) => tc.playerId === rightPlayer.id)}
                 position="right"
+                showHiddenCard={isBatterHiddenActive && rightPlayer.playerIndex === currentBatterIndex}
               />
             )}
           </div>
         </div>
 
-        {/* My player label */}
-        <div className="flex justify-center flex-shrink-0 pb-1">
+        {/* My player label + hidden-card badge (visible when I am the batter) */}
+        <div className="flex justify-center flex-shrink-0 pb-1 gap-2 items-center">
           {me && (
             <div className={`
               flex items-center gap-2 px-3 py-1.5 rounded-full text-xs
@@ -213,6 +258,13 @@ export function GameScreen() {
               <span className={`w-1.5 h-1.5 rounded-full ${me.connected ? "bg-green-400" : "bg-red-400"}`} />
               <span>{me.name} (You)</span>
               {isMyTurn && <span>• Your Turn!</span>}
+            </div>
+          )}
+          {/* Face-down hidden card badge — visible to me when I am the batter and trump not yet revealed */}
+          {amIBatter && isBatterHiddenActive && (
+            <div className="flex flex-col items-center gap-0.5">
+              <CardBack size="sm" />
+              <span className="text-xs text-amber-400">Hidden</span>
             </div>
           )}
         </div>
@@ -247,6 +299,35 @@ export function GameScreen() {
                 </button>
               )}
             </div>
+          )}
+
+          {showReshuffleButtonClient && (
+            <div className="flex flex-col items-center mt-2 px-4">
+              <button
+                onClick={requestReshuffle}
+                disabled={!canRequestReshuffleClient}
+                className={
+                  !canRequestReshuffleClient
+                    ? "bg-gray-800 text-gray-500 text-xs px-4 py-2 rounded-lg cursor-not-allowed"
+                    : "bg-gray-700 hover:bg-gray-600 text-white text-xs px-4 py-2 rounded-lg transition-colors"
+                }
+              >
+                Request Reshuffle
+              </button>
+              {reshuffleInlineError && (
+                <p className="text-red-300 text-xs mt-1">{reshuffleInlineError}</p>
+              )}
+                {!reshuffleInlineError && reshuffleDisabledReason && (
+                  <p className="text-gray-400 text-xs mt-1">{reshuffleDisabledReason}</p>
+                )}
+            </div>
+          )}
+
+          {/* No-active-suit banner: server will accept any card, tell the player */}
+          {isMyTurn && activeSuit && !myHand.some((c) => c.suit === activeSuit) && (
+            <p className="text-center text-amber-300 text-xs mt-1 font-medium">
+              ⚠ No {getSuitName(activeSuit as Suit)} — play any card
+            </p>
           )}
 
           {/* Turn hint */}
@@ -289,6 +370,21 @@ export function GameScreen() {
           totalScores={totalScores}
           onDismiss={dismissRoundResult}
         />
+      )}
+
+      {/* ── Waiting-for-next-round overlay ───────────────────────────────────── */}
+      {/* Show when this player already dismissed the round result but not all   */}
+      {/* 4 players have confirmed yet. Blocks interaction until server advances. */}
+      {serverPhase === "round_end" && !roundResult && (
+        <div className="absolute inset-0 bg-black/70 flex items-center justify-center z-30">
+          <div className="bg-gray-900 border border-gray-700 rounded-2xl p-8 text-center max-w-sm mx-4 shadow-2xl">
+            <div className="text-5xl mb-4 animate-pulse">⏳</div>
+            <h3 className="text-white text-lg font-semibold mb-2">Waiting for Players</h3>
+            <p className="text-gray-400 text-sm">
+              Waiting for all players to confirm before the next round starts…
+            </p>
+          </div>
+        </div>
       )}
 
       {/* ── Suit selector modal ──────────────────────────────────────────────── */}
@@ -468,11 +564,13 @@ function OpponentPanel({
   isCurrentTurn,
   trickCard,
   position,
+  showHiddenCard = false,
 }: {
   player: Player;
   isCurrentTurn: boolean;
   trickCard: any;
   position: "top" | "left" | "right";
+  showHiddenCard?: boolean;
 }) {
   const handSize = player.handSize ?? 0;
 
@@ -501,6 +599,13 @@ function OpponentPanel({
           <span className="text-gray-600 text-xs">· {handSize}🃏</span>
         )}
       </div>
+      {/* Face-down hidden card badge — all players can see the batter has a hidden card */}
+      {showHiddenCard && (
+        <div className="flex flex-col items-center gap-0.5 mt-0.5">
+          <CardBack size="sm" />
+          <span className="text-xs text-amber-400">Hidden</span>
+        </div>
+      )}
     </div>
   );
 }
