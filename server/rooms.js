@@ -225,9 +225,4 @@ export {
     cancelCleanup,
 };
 
-
-
-//TODO: Add more logging to understand flow of events better
-//TODO: Use a single room object rather than managing multiple rooms, as we only
-//      need 4 players to join and that's it. No need to generate random room codes and manage multiple rooms.
 //TODO: Remove the reconnecting logic

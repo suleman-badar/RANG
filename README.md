@@ -53,3 +53,34 @@ Backend built with:
 
 ---
 
+# 🚀 HOW TO RUN
+
+## 📦 Step 1 — Install dependencies
+
+```bash
+npm install
+```
+
+---
+
+## ⚙️ Step 2 — Start the project
+
+```bash
+npm run dev
+```
+
+This will:
+
+- Start backend (Node.js + Socket.IO)
+- Start frontend (React + Vite)
+- Run both together using concurrently
+
+---
+
+## 🌐 Application URL
+
+http://localhost:5173
+
+Open the URL in 4 different tabs. Have Fun :) 
+
+---
