@@ -12,7 +12,7 @@ import { io, Socket } from "socket.io-client";
 const SERVER_URL = (import.meta as any).env?.VITE_SERVER_URL || "http://localhost:3001";
 const STORAGE_KEY = "rang_advance_session";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─── Types ────
 
 export type Suit = "H" | "D" | "C" | "S";
 
@@ -163,7 +163,7 @@ export interface GameState {
   isHiddenBatter: boolean;
 }
 
-// ─── Context ──────────────────────────────────────────────────────────────────
+// ─── Context ─────
 
 interface GameContextValue {
   state: GameState;
@@ -190,7 +190,7 @@ export function useGame() {
   return ctx;
 }
 
-// ─── Initial State ────────────────────────────────────────────────────────────
+// ─── Initial State ────
 
 const INITIAL_STATE: GameState = {
   socketConnected: false,
@@ -229,7 +229,7 @@ const INITIAL_STATE: GameState = {
   isHiddenBatter: false,
 };
 
-// ─── Session Persistence ──────────────────────────────────────────────────────
+// ─── Session Persistence ──
 
 interface Session {
   playerName: string;
@@ -262,7 +262,7 @@ function clearSession() {
   }
 }
 
-// ─── Helper: merge server state into our state ────────────────────────────────
+// ─── Helper: merge server state into our state ─────
 
 function mergeServerState(prev: GameState, data: Partial<GameState> & Record<string, any>): Partial<GameState> {
   const patch: Partial<GameState> = {};
@@ -295,7 +295,7 @@ function mergeServerState(prev: GameState, data: Partial<GameState> & Record<str
   return patch;
 }
 
-// ─── Provider ─────────────────────────────────────────────────────────────────
+// ─── Provider ───
 
 export function GameProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<GameState>(INITIAL_STATE);
@@ -310,7 +310,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({ ...prev, ...patch }));
   }, []);
 
-  // ── Socket Setup ─────────────────────────────────────────────────────────
+  // ── Socket Setup ─────
 
   useEffect(() => {
     const socket = io(SERVER_URL, {
@@ -323,12 +323,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
     socketRef.current = socket;
 
-    // ─ Connection ─────────────────────────────────────────────────────────
+    //  Connection ────
 
     socket.on("connect", () => {
       update({ socketConnected: true });
 
-      // Attempt auto-reconnect if session exists
+      // Attempt auto reconnect if session exists
       const session = loadSession();
       if (session) {
         update({ myPlayerName: session.playerName, roomCode: session.roomCode, lastError: null, lastErrorCode: null, screen: "lobby" });
@@ -344,7 +344,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       update({ socketConnected: false });
     });
 
-    // ─ Room events ────────────────────────────────────────────────────────
+    // ─ Room events ───
 
     socket.on("room_created", (data: { roomCode: string; playerId: string; playerIndex?: number }) => {
       const cur = stateRef.current;
@@ -405,7 +405,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       setState((prev) => ({ ...prev, ...patch, lastError: null, lastErrorCode: null }));
     });
 
-    // ─ Game-specific state update ─────────────────────────────────────────
+    // ─ Game-specific state update ──
 
     socket.on("game_state", (data: any) => {
       const cur = stateRef.current;
@@ -429,7 +429,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       setState((prev) => ({ ...prev, ...patch }));
     });
 
-    // ─ Joined room confirmation ───────────────────────────────────────────
+    // ─ Joined room confirmation 
 
     socket.on("joined_room", (data: { roomCode: string; playerId: string; reconnected?: boolean }) => {
       const cur = stateRef.current;
@@ -452,7 +452,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       update(patch);
     });
 
-    // ─ Toss ───────────────────────────────────────────────────────────────
+    // ─ Toss ───
 
     socket.on("toss_card", (data: any) => {
       // Server emits during start_game before toss_result; use this to navigate into toss UI.

@@ -51,7 +51,7 @@ function executeOpen(room, playerId, trumpSuit) {
     returnCurrentTrickCardsToHands(room);
     ++room.openCountForBatter;
 
-    // Hidden card is deactivated and returned.
+    // hidden trump card is deactivated and returned
     if (room.hiddenCard) {
         const batter = room.players[room.currentBatterIndex];
         batter.hand.push(room.hiddenCard);
