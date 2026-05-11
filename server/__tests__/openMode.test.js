@@ -100,10 +100,32 @@ describe('openMode', () => {
         const openResult = executeOpen(room, 'p2', 'S');
         expect(openResult.ok).toBe(true);
         expect(room.openCountForBatter).toBe(0);
+        expect(room.openDeclaredByTeam).toBe(0);
+        expect(room.openDeclaredByPlayerId).toBe('p2');
 
         room.currentPlayerIndex = 1;
         const doubleOpenResult = executeDoubleOpen(room, 'p1', 'H');
         expect(doubleOpenResult.ok).toBe(true);
         expect(room.openCountForBatter).toBe(0);
+        expect(room.openDeclaredByTeam).toBe(0);
+        expect(room.openDeclaredByPlayerId).toBe('p2');
+    });
+
+    test('Double-Open does not change open ownership when bowling team declared Open', () => {
+        const room = makeRoom();
+        room.players[0].hand = [{ suit: 'D', value: 2, id: 'D-2' }];
+
+        const openResult = executeOpen(room, 'p1', 'S');
+        expect(openResult.ok).toBe(true);
+        expect(room.openCountForBatter).toBe(1);
+        expect(room.openDeclaredByTeam).toBe(1);
+        expect(room.openDeclaredByPlayerId).toBe('p1');
+
+        room.currentPlayerIndex = 2;
+        const doubleOpenResult = executeDoubleOpen(room, 'p2', 'H');
+        expect(doubleOpenResult.ok).toBe(true);
+        expect(room.openCountForBatter).toBe(1);
+        expect(room.openDeclaredByTeam).toBe(1);
+        expect(room.openDeclaredByPlayerId).toBe('p1');
     });
 });

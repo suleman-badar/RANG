@@ -99,9 +99,7 @@ function executeDoubleOpen(room, playerId, trumpSuit) {
     room.trumpSuit = trumpSuit;
     room.trumpRevealed = true;
 
-    room.openDeclaredByPlayerId = playerId;
-    const decl = room.players.find((p) => p.id === playerId);
-    room.openDeclaredByTeam = decl ? decl.teamIndex : null;
+    // Keep open ownership from the initial Open declaration.
 
     restartRoundFromAlpha(room, playerId);
     return { ok: true, alphaPlayerId: playerId };
