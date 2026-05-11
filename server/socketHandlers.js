@@ -3,7 +3,7 @@ import { createRoom, joinRoom, getRoom, findPlayerBySocket, findPlayerById, cons
 import { createDeck, shuffle } from './gameLogic/deck.js';
 import { runTossStep } from './gameLogic/toss.js';
 import { validatePlay, resolveTrick, checkConsecutiveWins } from './gameLogic/turnEngine.js';
-import { shouldRevealTrump, revealTrump } from './gameLogic/trumpEngine.js';
+import { revealTrumpAtTurnStart } from './gameLogic/trumpEngine.js';
 import { canDeclareOpen, executeOpen, canDeclareDoubleOpen, executeDoubleOpen } from './gameLogic/openMode.js';
 import { calculatePoints } from './gameLogic/scoring.js';
 import { getNextBatterIndex, isGameOver } from './gameLogic/rotation.js';
@@ -499,18 +499,6 @@ function registerSocketHandlers(io, socket) {
         const cardIdx = player.hand.findIndex((c) => c.id === cardId);
         const card = player.hand[cardIdx];
 
-        // Trump reveal trigger for bowling team when they cannot follow
-        if (room.activeSuit && card.suit !== room.activeSuit) {
-            const hasActiveSuit = player.hand.some((c) => c.suit === room.activeSuit);
-            if (!hasActiveSuit && shouldRevealTrump(room, player.id)) {
-                const hidden = revealTrump(room);
-                if (hidden) {
-                    emitTrumpRevealed(io, room, hidden);
-                    emitGameState(io, room);
-                }
-            }
-        }
-
         // Apply play
         player.hand.splice(cardIdx, 1);
         if (!room.activeSuit) room.activeSuit = card.suit;
@@ -573,6 +561,12 @@ function registerSocketHandlers(io, socket) {
         room.currentPlayerIndex = trick.winnerPlayerIndex;
 
         if (room.phase === 'open_window' && room.currentTurn > 1) room.phase = 'playing';
+
+        const nextPlayer = room.players[room.currentPlayerIndex];
+        const hidden = nextPlayer ? revealTrumpAtTurnStart(room, nextPlayer.id) : null;
+        if (hidden) {
+            emitTrumpRevealed(io, room, hidden);
+        }
         emitGameState(io, room);
     });
 

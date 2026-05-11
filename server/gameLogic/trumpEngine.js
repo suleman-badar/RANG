@@ -34,4 +34,9 @@ function revealTrump(room) {
     return hiddenCard;
 }
 
-export { shouldRevealTrump, revealTrump };
+function revealTrumpAtTurnStart(room, playerId) {
+    if (!shouldRevealTrump(room, playerId)) return null;
+    return revealTrump(room);
+}
+
+export { shouldRevealTrump, revealTrump, revealTrumpAtTurnStart };

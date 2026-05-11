@@ -1,4 +1,4 @@
-import { shouldRevealTrump, revealTrump } from '../gameLogic/trumpEngine.js';
+import { shouldRevealTrump, revealTrump, revealTrumpAtTurnStart } from '../gameLogic/trumpEngine.js';
 
 function makeRoom() {
     return {
@@ -43,5 +43,19 @@ describe('trumpEngine', () => {
         expect(room.hiddenCard).toBe(null);
         expect(batter.hand.find((c) => c.id === 'S-9')).toBeTruthy();
         expect(room.trickCards.every((t) => t.hidden === false)).toBe(true);
+    });
+
+    test('revealTrumpAtTurnStart() reveals automatically for a bowling player who cannot follow suit', () => {
+        const room = makeRoom();
+        room.currentPlayerIndex = 1;
+        const bowler = room.players[1];
+        bowler.hand = [{ suit: 'D', value: 2, id: 'D-2' }];
+
+        const hidden = revealTrumpAtTurnStart(room, bowler.id);
+
+        expect(hidden).toEqual({ suit: 'S', value: 9, id: 'S-9' });
+        expect(room.trumpRevealed).toBe(true);
+        expect(room.trumpSuit).toBe('S');
+        expect(room.hiddenCard).toBe(null);
     });
 });
