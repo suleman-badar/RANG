@@ -19,7 +19,7 @@ function makeRoom() {
             { playerId: 'p2', card: null, hidden: false },
             { playerId: 'p3', card: null, hidden: false },
         ],
-        lastTrickWinnerIndex: null,
+        lastTrickWinnerPlayerId: null,
         consecutiveBowlingWins: 0,
         lastTrickWasAce: false,
         openDeclaredByPlayerId: null,

@@ -80,36 +80,45 @@ function getTargetConsecutiveTeam(room) {
     return getBowlingTeamIndex(room);
 }
 
-function checkConsecutiveWins(room, trickWinnerTeam, winningCard) {
+function checkConsecutiveWins(room, trickWinnerPlayerId, winningCard) {
     const targetTeam = getTargetConsecutiveTeam(room);
     if (targetTeam === null) return { roundOver: false };
 
-    const isAceWin = winningCard && winningCard.value === 14;
+    const winner = room.players.find((p) => p.id === trickWinnerPlayerId);
+    if (!winner) return { roundOver: false };
 
-    // In open/double open: Turn 1 is excluded from consecutive tracking
+    const isAceWin = winningCard && winningCard.value === 14;
+    const winnerTeam = winner.teamIndex;
+
+    // In open/double open: Turn 1 is excluded from consecutive tracking.
     if ((room.openMode || room.doubleOpenMode) && room.currentTurn === 1) {
         room.consecutiveBowlingWins = 0;
-        room.lastTrickWinnerIndex = null;
+        room.lastTrickWinnerPlayerId = null;
         room.lastTrickWasAce = false;
         return { roundOver: false };
     }
 
-    if (trickWinnerTeam !== targetTeam) {
+    if (winnerTeam !== targetTeam) {
         room.consecutiveBowlingWins = 0;
+        room.lastTrickWinnerPlayerId = trickWinnerPlayerId;
         room.lastTrickWasAce = isAceWin;
         return { roundOver: false };
     }
 
-    // Winner is the target team.
-    const lastWinnerTeam = room.lastTrickWinnerIndex === null ? null : room.lastTrickWinnerIndex % 2;
-    const lastWasTarget = lastWinnerTeam === targetTeam;
-    const aceAcePair = lastWasTarget && room.lastTrickWasAce && isAceWin;
+    const samePlayerAsPrevious = room.lastTrickWinnerPlayerId === trickWinnerPlayerId;
+    const aceAcePair = samePlayerAsPrevious && room.lastTrickWasAce && isAceWin;
 
-    if (!aceAcePair) room.consecutiveBowlingWins += 1;
+    if (samePlayerAsPrevious) {
+        if (!aceAcePair) room.consecutiveBowlingWins += 1;
+    } else {
+        room.consecutiveBowlingWins = 1;
+    }
+
+    room.lastTrickWinnerPlayerId = trickWinnerPlayerId;
     room.lastTrickWasAce = isAceWin;
 
     if (room.consecutiveBowlingWins >= 2) {
-        return { roundOver: true, winnerTeam: targetTeam, reason: 'two_consecutive_non_ace_wins' };
+        return { roundOver: true, winnerTeam: targetTeam, reason: 'two_consecutive_non_ace_same_player_wins' };
     }
     return { roundOver: false };
 }

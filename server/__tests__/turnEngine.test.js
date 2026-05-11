@@ -16,7 +16,7 @@ function makeRoom() {
             { playerId: 'p2', card: null, hidden: false },
             { playerId: 'p3', card: null, hidden: false },
         ],
-        lastTrickWinnerIndex: null,
+        lastTrickWinnerPlayerId: null,
         consecutiveBowlingWins: 0,
         lastTrickWasAce: false,
         players: [
@@ -86,32 +86,39 @@ describe('turnEngine', () => {
 
     test('Consecutive win counter increments correctly', () => {
         const room = makeRoom();
-        // Batter team is team0 => bowling team is team1 (target).
-        room.lastTrickWinnerIndex = 0;
+        room.lastTrickWinnerPlayerId = 'p1';
         room.consecutiveBowlingWins = 0;
-        const res = checkConsecutiveWins(room, 1, { suit: 'H', value: 13, id: 'H-13' });
+        const res = checkConsecutiveWins(room, 'p1', { suit: 'H', value: 13, id: 'H-13' });
+        expect(res.roundOver).toBe(false);
+        expect(room.consecutiveBowlingWins).toBe(1);
+    });
+
+    test('Same team but different player does not count as consecutive', () => {
+        const room = makeRoom();
+        room.lastTrickWinnerPlayerId = 'p1';
+        room.consecutiveBowlingWins = 1;
+
+        const res = checkConsecutiveWins(room, 'p3', { suit: 'D', value: 12, id: 'D-12' });
+
         expect(res.roundOver).toBe(false);
         expect(room.consecutiveBowlingWins).toBe(1);
     });
 
     test('Ace exception: two consecutive bowling wins with aces do NOT trigger round end', () => {
         const room = makeRoom();
-        // First target win with Ace
-        room.lastTrickWinnerIndex = 0;
-        checkConsecutiveWins(room, 1, { suit: 'H', value: 14, id: 'H-14' });
-        room.lastTrickWinnerIndex = 1;
-        // Second target win with Ace should not increment
-        const res = checkConsecutiveWins(room, 1, { suit: 'D', value: 14, id: 'D-14' });
+        room.lastTrickWinnerPlayerId = 'p1';
+        checkConsecutiveWins(room, 'p1', { suit: 'H', value: 14, id: 'H-14' });
+        // Second target win with Ace by the same player should not trigger round end
+        const res = checkConsecutiveWins(room, 'p1', { suit: 'D', value: 14, id: 'D-14' });
         expect(res.roundOver).toBe(false);
         expect(room.consecutiveBowlingWins).toBe(1);
     });
 
     test('Two consecutive bowling wins with non-ace cards DO trigger round end', () => {
         const room = makeRoom();
-        room.lastTrickWinnerIndex = 0;
-        checkConsecutiveWins(room, 1, { suit: 'H', value: 13, id: 'H-13' });
-        room.lastTrickWinnerIndex = 1;
-        const res = checkConsecutiveWins(room, 1, { suit: 'D', value: 12, id: 'D-12' });
+        room.lastTrickWinnerPlayerId = 'p1';
+        checkConsecutiveWins(room, 'p1', { suit: 'H', value: 13, id: 'H-13' });
+        const res = checkConsecutiveWins(room, 'p1', { suit: 'D', value: 12, id: 'D-12' });
         expect(res.roundOver).toBe(true);
         expect(res.winnerTeam).toBe(1);
     });

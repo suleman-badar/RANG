@@ -36,7 +36,7 @@ function returnCurrentTrickCardsToHands(room) {
 function restartRoundFromAlpha(room, alphaPlayerId) {
     room.currentTurn = 1;
     room.activeSuit = null;
-    room.lastTrickWinnerIndex = null;
+    room.lastTrickWinnerPlayerId = null;
     room.consecutiveBowlingWins = 0;
     room.lastTrickWasAce = false;
 

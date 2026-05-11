@@ -150,7 +150,7 @@ function dealForRound(room) {
     room.currentTurn = 1;
     room.currentPlayerIndex = room.currentBatterIndex;
     room.activeSuit = null;
-    room.lastTrickWinnerIndex = null;
+    room.lastTrickWinnerPlayerId = null;
     room.consecutiveBowlingWins = 0;
     room.lastTrickWasAce = false;
     room.phase = 'open_window';
@@ -523,10 +523,10 @@ function registerSocketHandlers(io, socket) {
         const winner = room.players.find((p) => p.id === trick.winnerPlayerId);
         const winnerTeam = winner ? winner.teamIndex : 0;
 
-        const consecutiveCheck = checkConsecutiveWins(room, winnerTeam, trick.winningCard);
+        const consecutiveCheck = checkConsecutiveWins(room, trick.winnerPlayerId, trick.winningCard);
 
         const isExcludedOpenTurn1 = (room.openMode || room.doubleOpenMode) && room.currentTurn === 1;
-        room.lastTrickWinnerIndex = isExcludedOpenTurn1 ? null : trick.winnerPlayerIndex;
+        room.lastTrickWinnerPlayerId = isExcludedOpenTurn1 ? null : trick.winnerPlayerId;
 
         io.to(room.roomCode).emit('trick_result', {
             winnerPlayerId: trick.winnerPlayerId,
