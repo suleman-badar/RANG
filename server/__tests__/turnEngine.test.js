@@ -104,21 +104,32 @@ describe('turnEngine', () => {
         expect(room.consecutiveBowlingWins).toBe(1);
     });
 
-    test('Ace exception: two consecutive bowling wins with aces do NOT trigger round end', () => {
+    test('Open mode ace-ace extension keeps the game alive until Trick 3', () => {
         const room = makeRoom();
+        room.openMode = true;
+        room.openDeclaredByTeam = 0;
+        room.currentTurn = 2;
         room.lastTrickWinnerPlayerId = 'p1';
-        checkConsecutiveWins(room, 'p1', { suit: 'H', value: 14, id: 'H-14' });
-        // Second target win with Ace by the same player should not trigger round end
-        const res = checkConsecutiveWins(room, 'p1', { suit: 'D', value: 14, id: 'D-14' });
-        expect(res.roundOver).toBe(false);
+        room.lastTrickWasAce = true;
+        room.consecutiveBowlingWins = 1;
+
+        const second = checkConsecutiveWins(room, 'p1', { suit: 'D', value: 14, id: 'D-14' });
+        expect(second.roundOver).toBe(false);
         expect(room.consecutiveBowlingWins).toBe(1);
+
+        room.currentTurn = 3;
+        const third = checkConsecutiveWins(room, 'p1', { suit: 'H', value: 13, id: 'H-13' });
+        expect(third.roundOver).toBe(true);
+        expect(third.winnerTeam).toBe(1);
     });
 
-    test('Two consecutive bowling wins with non-ace cards DO trigger round end', () => {
+    test('Normal mode still ends after two same-player bowling wins, even with aces', () => {
         const room = makeRoom();
         room.lastTrickWinnerPlayerId = 'p1';
-        checkConsecutiveWins(room, 'p1', { suit: 'H', value: 13, id: 'H-13' });
-        const res = checkConsecutiveWins(room, 'p1', { suit: 'D', value: 12, id: 'D-12' });
+        room.lastTrickWasAce = true;
+        room.consecutiveBowlingWins = 1;
+
+        const res = checkConsecutiveWins(room, 'p1', { suit: 'D', value: 14, id: 'D-14' });
         expect(res.roundOver).toBe(true);
         expect(res.winnerTeam).toBe(1);
     });

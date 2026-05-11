@@ -89,12 +89,14 @@ function checkConsecutiveWins(room, trickWinnerPlayerId, winningCard) {
 
     const isAceWin = winningCard && winningCard.value === 14;
     const winnerTeam = winner.teamIndex;
+    const isOpenOrDoubleOpen = room.openMode || room.doubleOpenMode;
 
-    // In open/double open: Turn 1 is excluded from consecutive tracking.
-    if ((room.openMode || room.doubleOpenMode) && room.currentTurn === 1) {
+    // In open/double-open: Turn 1 is excluded from consecutive tracking,
+    // but we still remember whether that trick was won with an Ace.
+    if (isOpenOrDoubleOpen && room.currentTurn === 1) {
         room.consecutiveBowlingWins = 0;
         room.lastTrickWinnerPlayerId = null;
-        room.lastTrickWasAce = false;
+        room.lastTrickWasAce = isAceWin;
         return { roundOver: false };
     }
 
@@ -106,10 +108,14 @@ function checkConsecutiveWins(room, trickWinnerPlayerId, winningCard) {
     }
 
     const samePlayerAsPrevious = room.lastTrickWinnerPlayerId === trickWinnerPlayerId;
-    const aceAcePair = samePlayerAsPrevious && room.lastTrickWasAce && isAceWin;
+    const aceAcePair = isOpenOrDoubleOpen && room.currentTurn <= 3 && samePlayerAsPrevious && room.lastTrickWasAce && isAceWin;
 
     if (samePlayerAsPrevious) {
-        if (!aceAcePair) room.consecutiveBowlingWins += 1;
+        if (aceAcePair) {
+            room.consecutiveBowlingWins = 1;
+        } else {
+            room.consecutiveBowlingWins += 1;
+        }
     } else {
         room.consecutiveBowlingWins = 1;
     }
