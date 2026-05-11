@@ -1,4 +1,4 @@
-import { getBatterTeamIndex } from '../rooms.js';
+import { getBatterTeamIndex, getBowlingTeamIndex } from '../rooms.js';
 
 function isValidSuit(s) {
     return s === 'H' || s === 'D' || s === 'C' || s === 'S';
@@ -49,7 +49,6 @@ function executeOpen(room, playerId, trumpSuit) {
     if (!isValidSuit(trumpSuit)) return { ok: false, errorCode: 'INVALID_ACTION' };
 
     returnCurrentTrickCardsToHands(room);
-    ++room.openCountForBatter;
 
     // hidden trump card is deactivated and returned
     if (room.hiddenCard) {
@@ -66,6 +65,10 @@ function executeOpen(room, playerId, trumpSuit) {
     room.openDeclaredByPlayerId = playerId;
     const decl = room.players.find((p) => p.id === playerId);
     room.openDeclaredByTeam = decl ? decl.teamIndex : null;
+
+    if (decl && decl.teamIndex === getBowlingTeamIndex(room)) {
+        ++room.openCountForBatter;
+    }
 
     restartRoundFromAlpha(room, playerId);
     return { ok: true, alphaPlayerId: playerId };

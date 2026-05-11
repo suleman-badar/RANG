@@ -1,4 +1,4 @@
-import { canDeclareOpen, executeOpen, canDeclareDoubleOpen } from '../gameLogic/openMode.js';
+import { canDeclareOpen, executeOpen, canDeclareDoubleOpen, executeDoubleOpen } from '../gameLogic/openMode.js';
 
 function makeRoom() {
     return {
@@ -81,5 +81,29 @@ describe('openMode', () => {
         expect(room.hiddenCard).toBe(null);
         expect(room.players[0].hand.find((c) => c.id === 'H-7')).toBeTruthy();
         expect(room.currentPlayerIndex).toBe(1);
+    });
+
+    test('Open declared by the bowling team increments openCountForBatter', () => {
+        const room = makeRoom();
+        room.players[0].hand = [{ suit: 'D', value: 2, id: 'D-2' }];
+        const result = executeOpen(room, 'p1', 'S');
+
+        expect(result.ok).toBe(true);
+        expect(room.openCountForBatter).toBe(1);
+    });
+
+    test('Open declared by the batting team does not increment openCountForBatter, even after Double-Open', () => {
+        const room = makeRoom();
+        room.currentPlayerIndex = 2;
+        room.players[0].hand = [{ suit: 'D', value: 2, id: 'D-2' }];
+
+        const openResult = executeOpen(room, 'p2', 'S');
+        expect(openResult.ok).toBe(true);
+        expect(room.openCountForBatter).toBe(0);
+
+        room.currentPlayerIndex = 1;
+        const doubleOpenResult = executeDoubleOpen(room, 'p1', 'H');
+        expect(doubleOpenResult.ok).toBe(true);
+        expect(room.openCountForBatter).toBe(0);
     });
 });
