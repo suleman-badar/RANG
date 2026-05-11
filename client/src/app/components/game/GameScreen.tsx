@@ -687,7 +687,7 @@ function TrickWinnerOverlay({
   }, [onDismiss]);
 
   return (
-    <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
+    <div className="absolute top-14 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
       <div className={`
         px-6 py-4 rounded-2xl border text-center shadow-2xl
         pointer-events-auto cursor-pointer

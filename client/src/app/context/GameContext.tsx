@@ -597,32 +597,49 @@ export function GameProvider({ children }: { children: ReactNode }) {
           ? data.winnerPlayerIndex
           : cur.players.find((p) => p.id === data.winnerPlayerId)?.playerIndex ?? 0;
 
-      const hiddenCards = Array.isArray(data?.trickCards)
-        ? data.trickCards
-            .map((slot: any) => {
-              const previousSlot = cur.trickCards.find((tc) => tc.playerId === slot.playerId);
-              if (!previousSlot?.hidden) return null;
-              return slot.card ?? null;
-            })
+      const displayTrickCards = Array.isArray(data?.trickCards)
+        ? data.trickCards.map((slot: any) => {
+            const previousSlot = cur.trickCards.find((tc) => tc.playerId === slot.playerId);
+            const player = cur.players.find((p) => p.id === slot.playerId);
+            const battingTeam = cur.currentBatterIndex % 2;
+            const computedHidden = Boolean(
+              slot.card &&
+              !cur.trumpRevealed &&
+              cur.activeSuit &&
+              player &&
+              player.teamIndex === battingTeam &&
+              slot.card.suit !== cur.activeSuit
+            );
+
+            return {
+              playerId: slot.playerId,
+              card: slot.card ?? null,
+              hidden: previousSlot?.hidden ?? computedHidden,
+            };
+          })
+        : cur.trickCards;
+
+      const hiddenCards = Array.isArray(displayTrickCards)
+        ? displayTrickCards
+            .map((slot: any) => (slot?.hidden ? slot.card ?? null : null))
             .filter(Boolean)
         : [];
 
       if (hiddenCards.length > 0 && cur.trumpRevealed) {
         startHiddenPileHold();
       }
-
+      clearTrickHold();
       update({
         lastTrickWinner: {
           playerId: data.winnerPlayerId,
           playerIndex: winnerIndex,
         },
         consecutiveBowlingWins: typeof (data as any)?.consecutiveBowlingWins === "number" ? (data as any).consecutiveBowlingWins : cur.consecutiveBowlingWins,
-        trickCards: cur.trickCards,
+        trickCards: displayTrickCards,
         hiddenPile: hiddenCards.length ? [...cur.hiddenPile, ...hiddenCards] : cur.hiddenPile,
       });
 
       trickClearTimerRef.current = window.setTimeout(() => {
-        clearTrickHold();
         commitPendingTrickState();
       }, 3000);
     });
