@@ -33,6 +33,7 @@ export function GameScreen() {
     doubleOpenMode,
     openDeclaredByTeam,
     openDeclaredByPlayerId,
+    hiddenPile,
     totalScores,
     roundScores,
     lastTrickWinner,
@@ -224,7 +225,8 @@ export function GameScreen() {
           </div>
 
           {/* Center: Trick area */}
-          <div className="flex-1 flex items-center justify-center px-4">
+          <div className="flex-1 flex flex-col items-center justify-center px-4 gap-3">
+            <HiddenPileArea cards={hiddenPile} revealed={trumpRevealed} />
             <TrickArea
               players={players}
               trickCards={trickCards}
@@ -553,6 +555,53 @@ function TrickArea({
 
       {/* Bottom (me) */}
       <div>{renderSlot(myPlayerIndex, me?.name ?? "You")}</div>
+    </div>
+  );
+}
+
+function HiddenPileArea({
+  cards,
+  revealed,
+}: {
+  cards: Card[];
+  revealed: boolean;
+}) {
+  if (!cards.length) return null;
+
+  const visibleCards = cards.slice(-6);
+
+  return (
+    <div className="flex flex-col items-center gap-2">
+      <div className="text-[10px] uppercase tracking-[0.3em] text-amber-300/80">
+        Hidden pile
+      </div>
+      <div className="flex items-center justify-center min-h-16 px-2">
+        <div className="relative flex items-center justify-center" style={{ width: `${Math.max(visibleCards.length, 1) * 18 + 56}px`, height: "64px" }}>
+          {visibleCards.map((card, index) => {
+            const offset = index - (visibleCards.length - 1) / 2;
+            return (
+              <div
+                key={card.id}
+                className="absolute transition-all duration-500"
+                style={{
+                  transform: `translateX(${offset * 16}px) translateY(${Math.abs(offset) * 1.5}px) rotate(${offset * 4}deg)`,
+                  zIndex: index + 1,
+                }}
+              >
+                {revealed ? (
+                  <PlayingCard card={card} size="sm" className="shadow-lg" />
+                ) : (
+                  <CardBack size="sm" className="shadow-lg" />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <div className="text-[11px] text-gray-400">
+        {cards.length} hidden card{cards.length === 1 ? "" : "s"}
+        {revealed && <span className="ml-2 text-amber-300">revealed</span>}
+      </div>
     </div>
   );
 }
