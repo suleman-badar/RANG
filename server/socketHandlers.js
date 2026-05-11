@@ -499,15 +499,39 @@ function registerSocketHandlers(io, socket) {
         const cardIdx = player.hand.findIndex((c) => c.id === cardId);
         const card = player.hand[cardIdx];
 
-        // Apply play
+        // Apply play.
         player.hand.splice(cardIdx, 1);
         if (!room.activeSuit) room.activeSuit = card.suit;
 
-        const battingTeam = getBatterTeamIndex(room);
-        const hideFromBowling = !room.trumpRevealed && player.teamIndex === battingTeam && room.activeSuit && card.suit !== room.activeSuit;
+        // Trump reveal trigger for bowling team when they cannot follow.
+        if (room.activeSuit && card.suit !== room.activeSuit) {
+            const hasActiveSuit = player.hand.some((c) => c.suit === room.activeSuit);
+            if (!hasActiveSuit && shouldRevealTrump(room, player.id)) {
+                const hidden = revealTrump(room);
+                if (hidden) {
+                    emitTrumpRevealed(io, room, hidden);
+                }
+            }
+        }
+
+        // Auto-reveal trump when bowling player can't follow suit (on any turn during play)
+        if (room.activeSuit && card.suit !== room.activeSuit) {
+            const bowlingTeam = getBowlingTeamIndex(room);
+            if (player.teamIndex === bowlingTeam) {
+                const hasActiveSuit = player.hand.some((c) => c.suit === room.activeSuit);
+                if (!hasActiveSuit && shouldRevealTrump(room, player.id)) {
+                    const hidden = revealTrump(room);
+                    if (hidden) {
+                        emitTrumpRevealed(io, room, hidden);
+                    }
+                }
+            }
+        }
 
         const slot = room.trickCards.find((t) => t.playerId === player.id);
         slot.card = card;
+        const battingTeam = getBatterTeamIndex(room);
+        const hideFromBowling = !room.trumpRevealed && player.teamIndex === battingTeam && room.activeSuit && card.suit !== room.activeSuit;
         slot.hidden = hideFromBowling;
 
         // Advance to next seat within the trick

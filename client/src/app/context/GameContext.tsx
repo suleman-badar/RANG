@@ -611,8 +611,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
         startHiddenPileHold();
       }
 
-      clearTrickHold();
-
       update({
         lastTrickWinner: {
           playerId: data.winnerPlayerId,
@@ -624,6 +622,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       });
 
       trickClearTimerRef.current = window.setTimeout(() => {
+        clearTrickHold();
         commitPendingTrickState();
       }, 3000);
     });
