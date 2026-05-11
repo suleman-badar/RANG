@@ -511,7 +511,7 @@ function registerSocketHandlers(io, socket) {
         slot.hidden = hideFromBowling;
 
         // Advance to next seat within the trick
-        room.currentPlayerIndex = (room.currentPlayerIndex + 1) % 4;
+        room.currentPlayerIndex = (room.currentPlayerIndex + 3) % 4;
 
         emitGameState(io, room);
 
