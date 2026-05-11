@@ -38,6 +38,7 @@ function restartRoundFromAlpha(room, alphaPlayerId) {
     room.activeSuit = null;
     room.lastTrickWinnerPlayerId = null;
     room.consecutiveBowlingWins = 0;
+    room.consecutiveWinBanked = false;
     room.lastTrickWasAce = false;
 
     const alpha = room.players.find((p) => p.id === alphaPlayerId);

@@ -124,6 +124,10 @@ function checkConsecutiveWins(room, trickWinnerPlayerId, winningCard) {
     room.lastTrickWasAce = isAceWin;
 
     if (room.consecutiveBowlingWins >= 2) {
+        if (!room.trumpRevealed) {
+            room.consecutiveWinBanked = true;
+            return { roundOver: false };
+        }
         return { roundOver: true, winnerTeam: targetTeam, reason: 'two_consecutive_non_ace_same_player_wins' };
     }
     return { roundOver: false };

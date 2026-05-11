@@ -18,6 +18,7 @@ function makeRoom() {
         ],
         lastTrickWinnerPlayerId: null,
         consecutiveBowlingWins: 0,
+        consecutiveWinBanked: false,
         lastTrickWasAce: false,
         players: [
             { id: 'p0', playerIndex: 0, teamIndex: 0, hand: [] },
@@ -125,6 +126,7 @@ describe('turnEngine', () => {
 
     test('Normal mode still ends after two same-player bowling wins, even with aces', () => {
         const room = makeRoom();
+        room.trumpRevealed = true;
         room.lastTrickWinnerPlayerId = 'p1';
         room.lastTrickWasAce = true;
         room.consecutiveBowlingWins = 1;
@@ -132,5 +134,16 @@ describe('turnEngine', () => {
         const res = checkConsecutiveWins(room, 'p1', { suit: 'D', value: 14, id: 'D-14' });
         expect(res.roundOver).toBe(true);
         expect(res.winnerTeam).toBe(1);
+    });
+
+    test('Consecutive non-ace wins are banked when trump is hidden', () => {
+        const room = makeRoom();
+        room.lastTrickWinnerPlayerId = 'p1';
+        room.consecutiveBowlingWins = 1;
+        room.trumpRevealed = false;
+
+        const res = checkConsecutiveWins(room, 'p1', { suit: 'D', value: 13, id: 'D-13' });
+        expect(res.roundOver).toBe(false);
+        expect(room.consecutiveWinBanked).toBe(true);
     });
 });

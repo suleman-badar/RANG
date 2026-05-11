@@ -7,6 +7,7 @@ import { revealTrumpAtTurnStart } from './gameLogic/trumpEngine.js';
 import { canDeclareOpen, executeOpen, canDeclareDoubleOpen, executeDoubleOpen } from './gameLogic/openMode.js';
 import { calculatePoints } from './gameLogic/scoring.js';
 import { getNextBatterIndex, isGameOver } from './gameLogic/rotation.js';
+import { shouldRevealTrump, revealTrump } from './gameLogic/trumpEngine.js';
 
 const readySetsByRoom = Object.create(null);
 
@@ -152,6 +153,7 @@ function dealForRound(room) {
     room.activeSuit = null;
     room.lastTrickWinnerPlayerId = null;
     room.consecutiveBowlingWins = 0;
+    room.consecutiveWinBanked = false;
     room.lastTrickWasAce = false;
     room.phase = 'open_window';
 
@@ -203,6 +205,14 @@ function completeRound(io, room, winnerTeam, reason) {
         roundScores: room.roundScores,
     });
     emitGameState(io, room);
+}
+
+function maybeEndRoundForBankedConsecutiveWin(io, room) {
+    if (!room.consecutiveWinBanked) return false;
+    const bowlingTeam = getBowlingTeamIndex(room);
+    room.consecutiveWinBanked = false;
+    completeRound(io, room, bowlingTeam, 'banked_consecutive_non_ace_same_player_wins');
+    return true;
 }
 
 function maybeAdvanceToNextRound(io, room) {
@@ -510,6 +520,7 @@ function registerSocketHandlers(io, socket) {
                 const hidden = revealTrump(room);
                 if (hidden) {
                     emitTrumpRevealed(io, room, hidden);
+                    if (maybeEndRoundForBankedConsecutiveWin(io, room)) return;
                 }
             }
         }
@@ -523,6 +534,7 @@ function registerSocketHandlers(io, socket) {
                     const hidden = revealTrump(room);
                     if (hidden) {
                         emitTrumpRevealed(io, room, hidden);
+                        if (maybeEndRoundForBankedConsecutiveWin(io, room)) return;
                     }
                 }
             }
@@ -590,6 +602,7 @@ function registerSocketHandlers(io, socket) {
         const hidden = nextPlayer ? revealTrumpAtTurnStart(room, nextPlayer.id) : null;
         if (hidden) {
             emitTrumpRevealed(io, room, hidden);
+            if (maybeEndRoundForBankedConsecutiveWin(io, room)) return;
         }
         emitGameState(io, room);
     });

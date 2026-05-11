@@ -45,6 +45,7 @@ function buildInitialRoomState(roomCode, hostSocketId) {
         trickCards: [],
         lastTrickWinnerPlayerId: null,
         consecutiveBowlingWins: 0,
+        consecutiveWinBanked: false,
         lastTrickWasAce: false,
         batterRoundsPlayed: 0,
         openCountForBatter: 0,
