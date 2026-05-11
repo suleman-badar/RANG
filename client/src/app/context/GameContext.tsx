@@ -314,6 +314,24 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
   // Tracks the card we just optimistically removed so we can restore it on server rejection.
   const pendingPlayRef = useRef<Card | null>(null);
+  const trickClearTimerRef = useRef<number | null>(null);
+  const pendingTrickStateRef = useRef<Partial<GameState> | null>(null);
+
+  const clearTrickHold = useCallback(() => {
+    if (trickClearTimerRef.current !== null) {
+      window.clearTimeout(trickClearTimerRef.current);
+      trickClearTimerRef.current = null;
+    }
+    pendingTrickStateRef.current = null;
+  }, []);
+
+  const commitPendingTrickState = useCallback(() => {
+    const pending = pendingTrickStateRef.current;
+    if (!pending) return;
+    pendingTrickStateRef.current = null;
+    trickClearTimerRef.current = null;
+    setState((prev) => ({ ...prev, ...pending }));
+  }, []);
 
   const update = useCallback((patch: Partial<GameState>) => {
     setState((prev) => ({ ...prev, ...patch }));
@@ -432,6 +450,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
         }));
       }
 
+      if (trickClearTimerRef.current !== null) {
+        pendingTrickStateRef.current = patch;
+        return;
+      }
+
       // Confirm the pending play was accepted — no need to restore.
       pendingPlayRef.current = null;
 
@@ -541,15 +564,20 @@ export function GameProvider({ children }: { children: ReactNode }) {
           ? data.winnerPlayerIndex
           : cur.players.find((p) => p.id === data.winnerPlayerId)?.playerIndex ?? 0;
 
+      clearTrickHold();
+
       update({
         lastTrickWinner: {
           playerId: data.winnerPlayerId,
           playerIndex: winnerIndex,
         },
         consecutiveBowlingWins: typeof (data as any)?.consecutiveBowlingWins === "number" ? (data as any).consecutiveBowlingWins : cur.consecutiveBowlingWins,
-        trickCards: [],
-        activeSuit: null,
+        trickCards: Array.isArray((data as any)?.trickCards) ? (data as any).trickCards : cur.trickCards,
       });
+
+      trickClearTimerRef.current = window.setTimeout(() => {
+        commitPendingTrickState();
+      }, 3000);
     });
 
     // ─ Round result ───────────────────────────────────────────────────────
@@ -567,6 +595,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     // ─ Game over ──────────────────────────────────────────────────────────
 
     socket.on("game_over", (data: any) => {
+      clearTrickHold();
       const patch = mergeServerState(stateRef.current, data);
       patch.screen = "game_over";
       patch.serverPhase = "game_over";
@@ -619,10 +648,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
     });
 
     return () => {
+      clearTrickHold();
       socket.disconnect();
       socketRef.current = null;
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [clearTrickHold]);
 
   // ── Actions ──────────────────────────────────────────────────────────────
 
@@ -685,9 +715,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
   }, [update]);
 
   const leaveRoom = useCallback(() => {
+    clearTrickHold();
     clearSession();
     update({ ...INITIAL_STATE, socketConnected: stateRef.current.socketConnected });
-  }, [update]);
+  }, [clearTrickHold, update]);
 
   const clearError = useCallback(() => update({ lastError: null, lastErrorCode: null }), [update]);
   const dismissTrickWinner = useCallback(() => update({ lastTrickWinner: null }), [update]);
