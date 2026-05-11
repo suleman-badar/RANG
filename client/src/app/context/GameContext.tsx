@@ -78,6 +78,15 @@ function scoresToTuple(scores: any): [number, number] {
   return [0, 0];
 }
 
+function sortHand(cards: Card[]): Card[] {
+  const suitOrder: Record<Suit, number> = { H: 0, D: 1, C: 2, S: 3 };
+  return [...cards].sort((left, right) => {
+    const suitDelta = suitOrder[left.suit] - suitOrder[right.suit];
+    if (suitDelta !== 0) return suitDelta;
+    return left.value - right.value;
+  });
+}
+
 function phaseToScreen(phase: string | undefined, fallback: Screen): Screen {
   switch (phase) {
     case "lobby":
@@ -502,7 +511,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         isHiddenBatter: false,
       };
       if (Array.isArray(data?.batterNewHand)) {
-        patch.myHand = data.batterNewHand;
+        patch.myHand = sortHand(data.batterNewHand);
       }
       setState((prev) => ({ ...prev, ...patch }));
     });
@@ -512,7 +521,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     socket.on("deal_hand", (data: any) => {
       const hand: Card[] = data.hand || data.cards || [];
       const patch: Partial<GameState> = {
-        myHand: hand,
+        myHand: sortHand(hand),
         screen: "game",
         // Server tells this player whether they are the hidden batter
         isHiddenBatter: Boolean(data.isHiddenBatter),
@@ -581,7 +590,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
           // Put the card back only if it's not already in hand (safety check).
           myHand: prev.myHand.some((c) => c.id === rejected.id)
             ? prev.myHand
-            : [rejected, ...prev.myHand],
+            : sortHand([rejected, ...prev.myHand]),
           lastError: msg,
           lastErrorCode: data?.code ?? null,
         }));
