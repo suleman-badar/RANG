@@ -3,11 +3,10 @@ import { createRoom, joinRoom, getRoom, findPlayerBySocket, findPlayerById, cons
 import { createDeck, shuffle } from './gameLogic/deck.js';
 import { runTossStep } from './gameLogic/toss.js';
 import { validatePlay, resolveTrick, checkConsecutiveWins } from './gameLogic/turnEngine.js';
-import { revealTrumpAtTurnStart } from './gameLogic/trumpEngine.js';
+import { revealTrump } from './gameLogic/trumpEngine.js';
 import { canDeclareOpen, executeOpen, canDeclareDoubleOpen, executeDoubleOpen } from './gameLogic/openMode.js';
 import { calculatePoints } from './gameLogic/scoring.js';
 import { getNextBatterIndex, isGameOver } from './gameLogic/rotation.js';
-import { shouldRevealTrump, revealTrump } from './gameLogic/trumpEngine.js';
 
 const readySetsByRoom = Object.create(null);
 
@@ -513,33 +512,6 @@ function registerSocketHandlers(io, socket) {
         player.hand.splice(cardIdx, 1);
         if (!room.activeSuit) room.activeSuit = card.suit;
 
-        // Trump reveal trigger for bowling team when they cannot follow.
-        if (room.activeSuit && card.suit !== room.activeSuit) {
-            const hasActiveSuit = player.hand.some((c) => c.suit === room.activeSuit);
-            if (!hasActiveSuit && shouldRevealTrump(room, player.id)) {
-                const hidden = revealTrump(room);
-                if (hidden) {
-                    emitTrumpRevealed(io, room, hidden);
-                    if (maybeEndRoundForBankedConsecutiveWin(io, room)) return;
-                }
-            }
-        }
-
-        // Auto-reveal trump when bowling player can't follow suit (on any turn during play)
-        if (room.activeSuit && card.suit !== room.activeSuit) {
-            const bowlingTeam = getBowlingTeamIndex(room);
-            if (player.teamIndex === bowlingTeam) {
-                const hasActiveSuit = player.hand.some((c) => c.suit === room.activeSuit);
-                if (!hasActiveSuit && shouldRevealTrump(room, player.id)) {
-                    const hidden = revealTrump(room);
-                    if (hidden) {
-                        emitTrumpRevealed(io, room, hidden);
-                        if (maybeEndRoundForBankedConsecutiveWin(io, room)) return;
-                    }
-                }
-            }
-        }
-
         const slot = room.trickCards.find((t) => t.playerId === player.id);
         slot.card = card;
         const battingTeam = getBatterTeamIndex(room);
@@ -548,6 +520,19 @@ function registerSocketHandlers(io, socket) {
 
         // Advance to next seat within the trick
         room.currentPlayerIndex = (room.currentPlayerIndex + 3) % 4;
+
+        const nextPlayer = room.players[room.currentPlayerIndex];
+        if (!room.trumpRevealed && room.activeSuit && nextPlayer) {
+            const bowlingTeam = getBowlingTeamIndex(room);
+            const hasActiveSuit = nextPlayer.hand.some((c) => c.suit === room.activeSuit);
+            if (nextPlayer.teamIndex === bowlingTeam && !hasActiveSuit) {
+                const hidden = revealTrump(room);
+                if (hidden) {
+                    emitTrumpRevealed(io, room, hidden);
+                    if (maybeEndRoundForBankedConsecutiveWin(io, room)) return;
+                }
+            }
+        }
 
         emitGameState(io, room);
 
@@ -597,13 +582,6 @@ function registerSocketHandlers(io, socket) {
         room.currentPlayerIndex = trick.winnerPlayerIndex;
 
         if (room.phase === 'open_window' && room.currentTurn > 1) room.phase = 'playing';
-
-        const nextPlayer = room.players[room.currentPlayerIndex];
-        const hidden = nextPlayer ? revealTrumpAtTurnStart(room, nextPlayer.id) : null;
-        if (hidden) {
-            emitTrumpRevealed(io, room, hidden);
-            if (maybeEndRoundForBankedConsecutiveWin(io, room)) return;
-        }
         emitGameState(io, room);
     });
 

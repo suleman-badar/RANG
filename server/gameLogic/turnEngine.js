@@ -123,8 +123,9 @@ function checkConsecutiveWins(room, trickWinnerPlayerId, winningCard) {
     room.lastTrickWinnerPlayerId = trickWinnerPlayerId;
     room.lastTrickWasAce = isAceWin;
 
+    const trumpKnown = room.trumpRevealed || isOpenOrDoubleOpen;
     if (room.consecutiveBowlingWins >= 2) {
-        if (!room.trumpRevealed) {
+        if (!trumpKnown) {
             room.consecutiveWinBanked = true;
             return { roundOver: false };
         }
