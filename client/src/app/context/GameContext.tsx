@@ -346,7 +346,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const startHiddenPileHold = useCallback(() => {
-    hiddenPileClearPendingRef.current = false;
+    hiddenPileClearPendingRef.current = true;
     if (hiddenPileHoldTimerRef.current !== null) {
       window.clearTimeout(hiddenPileHoldTimerRef.current);
     }
@@ -554,7 +554,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
     });
 
     socket.on("trump_revealed", (data: any) => {
-      if (stateRef.current.hiddenPile.length > 0) {
+      // Add the revealed trump card to hiddenPile and start the clear timer
+      if (data?.hiddenCard) {
+        startHiddenPileHold();
+      } else if (stateRef.current.hiddenPile.length > 0) {
         startHiddenPileHold();
       }
       const patch: Partial<GameState> = {
@@ -562,6 +565,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
         trumpSuit: data?.trumpSuit ?? null,
         // Hidden card has been revealed — remove the face-down placeholder
         isHiddenBatter: false,
+        hiddenPile: data?.hiddenCard 
+          ? [...stateRef.current.hiddenPile, data.hiddenCard] 
+          : stateRef.current.hiddenPile,
       };
       if (Array.isArray(data?.batterNewHand)) {
         patch.myHand = sortHand(data.batterNewHand);
