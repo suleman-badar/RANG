@@ -1,4 +1,5 @@
 import { getBatterTeamIndex, getBowlingTeamIndex } from '../rooms.js';
+import { resetConsecutiveState } from './turnEngine.js';
 
 function isValidSuit(s) {
     return s === 'H' || s === 'D' || s === 'C' || s === 'S';
@@ -36,10 +37,7 @@ function returnCurrentTrickCardsToHands(room) {
 function restartRoundFromAlpha(room, alphaPlayerId) {
     room.currentTurn = 1;
     room.activeSuit = null;
-    room.lastTrickWinnerPlayerId = null;
-    room.consecutiveBowlingWins = 0;
-    room.consecutiveWinBanked = false;
-    room.lastTrickWasAce = false;
+    resetConsecutiveState(room);
 
     const alpha = room.players.find((p) => p.id === alphaPlayerId);
     room.currentPlayerIndex = alpha ? alpha.playerIndex : room.currentPlayerIndex;

@@ -134,10 +134,25 @@ function checkConsecutiveWins(room, trickWinnerPlayerId, winningCard) {
     return { roundOver: false };
 }
 
+function resetConsecutiveState(room) {
+    room.lastTrickWinnerPlayerId = null;
+    room.consecutiveBowlingWins = 0;
+    room.consecutiveWinBanked = false;
+    room.lastTrickWasAce = false;
+}
+
+function consumeBankedConsecutiveWin(room) {
+    if (!room.consecutiveWinBanked) return false;
+    room.consecutiveWinBanked = false;
+    return true;
+}
+
 export {
     validatePlay,
     resolveTrick,
     isTrumpCard,
     checkConsecutiveWins,
     getTargetConsecutiveTeam,
+    resetConsecutiveState,
+    consumeBankedConsecutiveWin,
 };

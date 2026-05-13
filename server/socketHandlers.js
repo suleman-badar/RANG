@@ -2,7 +2,7 @@ import { createRoom, joinRoom, getRoom, findPlayerBySocket, findPlayerById, cons
 
 import { createDeck, shuffle } from './gameLogic/deck.js';
 import { runTossStep } from './gameLogic/toss.js';
-import { validatePlay, resolveTrick, checkConsecutiveWins } from './gameLogic/turnEngine.js';
+import { validatePlay, resolveTrick, checkConsecutiveWins, resetConsecutiveState, consumeBankedConsecutiveWin } from './gameLogic/turnEngine.js';
 import { revealTrump } from './gameLogic/trumpEngine.js';
 import { canDeclareOpen, executeOpen, canDeclareDoubleOpen, executeDoubleOpen } from './gameLogic/openMode.js';
 import { calculatePoints } from './gameLogic/scoring.js';
@@ -150,10 +150,7 @@ function dealForRound(room) {
     room.currentTurn = 1;
     room.currentPlayerIndex = room.currentBatterIndex;
     room.activeSuit = null;
-    room.lastTrickWinnerPlayerId = null;
-    room.consecutiveBowlingWins = 0;
-    room.consecutiveWinBanked = false;
-    room.lastTrickWasAce = false;
+    resetConsecutiveState(room);
     room.phase = 'open_window';
 
     initTrickCards(room);
@@ -207,9 +204,8 @@ function completeRound(io, room, winnerTeam, reason) {
 }
 
 function maybeEndRoundForBankedConsecutiveWin(io, room) {
-    if (!room.consecutiveWinBanked) return false;
+    if (!consumeBankedConsecutiveWin(room)) return false;
     const bowlingTeam = getBowlingTeamIndex(room);
-    room.consecutiveWinBanked = false;
     completeRound(io, room, bowlingTeam, 'banked_consecutive_non_ace_same_player_wins');
     return true;
 }
@@ -515,9 +511,9 @@ function registerSocketHandlers(io, socket) {
         const slot = room.trickCards.find((t) => t.playerId === player.id);
         slot.card = card;
         const hideFromBowling = !room.trumpRevealed
-        && player.playerIndex === room.currentBatterIndex
-        && room.activeSuit
-        && card.suit !== room.activeSuit;
+            && player.playerIndex === room.currentBatterIndex
+            && room.activeSuit
+            && card.suit !== room.activeSuit;
         slot.hidden = hideFromBowling;
 
         // Advance to next seat within the trick
@@ -549,7 +545,6 @@ function registerSocketHandlers(io, socket) {
         const consecutiveCheck = checkConsecutiveWins(room, trick.winnerPlayerId, trick.winningCard);
 
         const isExcludedOpenTurn1 = (room.openMode || room.doubleOpenMode) && room.currentTurn === 1;
-        room.lastTrickWinnerPlayerId = isExcludedOpenTurn1 ? null : trick.winnerPlayerId;
 
         io.to(room.roomCode).emit('trick_result', {
             winnerPlayerId: trick.winnerPlayerId,
