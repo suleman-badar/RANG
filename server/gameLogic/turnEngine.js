@@ -80,38 +80,71 @@ function getTargetConsecutiveTeam(room) {
     return getBowlingTeamIndex(room);
 }
 
-function checkConsecutiveWins(room, trickWinnerTeam, winningCard) {
+function checkConsecutiveWins(room, trickWinnerPlayerId, winningCard) {
     const targetTeam = getTargetConsecutiveTeam(room);
     if (targetTeam === null) return { roundOver: false };
 
+    const winner = room.players.find((p) => p.id === trickWinnerPlayerId);
+    if (!winner) return { roundOver: false };
+
     const isAceWin = winningCard && winningCard.value === 14;
+    const winnerTeam = winner.teamIndex;
+    const isOpenOrDoubleOpen = room.openMode || room.doubleOpenMode;
 
-    // In open/double open: Turn 1 is excluded from consecutive tracking
-    if ((room.openMode || room.doubleOpenMode) && room.currentTurn === 1) {
+    // In open/double-open: Turn 1 is excluded from consecutive tracking,
+    // but we still remember whether that trick was won with an Ace.
+    if (isOpenOrDoubleOpen && room.currentTurn === 1) {
         room.consecutiveBowlingWins = 0;
-        room.lastTrickWinnerIndex = null;
-        room.lastTrickWasAce = false;
-        return { roundOver: false };
-    }
-
-    if (trickWinnerTeam !== targetTeam) {
-        room.consecutiveBowlingWins = 0;
+        room.lastTrickWinnerPlayerId = null;
         room.lastTrickWasAce = isAceWin;
         return { roundOver: false };
     }
 
-    // Winner is the target team.
-    const lastWinnerTeam = room.lastTrickWinnerIndex === null ? null : room.lastTrickWinnerIndex % 2;
-    const lastWasTarget = lastWinnerTeam === targetTeam;
-    const aceAcePair = lastWasTarget && room.lastTrickWasAce && isAceWin;
+    if (winnerTeam !== targetTeam) {
+        room.consecutiveBowlingWins = 0;
+        room.lastTrickWinnerPlayerId = trickWinnerPlayerId;
+        room.lastTrickWasAce = isAceWin;
+        return { roundOver: false };
+    }
 
-    if (!aceAcePair) room.consecutiveBowlingWins += 1;
+    const samePlayerAsPrevious = room.lastTrickWinnerPlayerId === trickWinnerPlayerId;
+    const aceAcePair = isOpenOrDoubleOpen && room.currentTurn <= 3 && samePlayerAsPrevious && room.lastTrickWasAce && isAceWin;
+
+    if (samePlayerAsPrevious) {
+        if (aceAcePair) {
+            room.consecutiveBowlingWins = 1;
+        } else {
+            room.consecutiveBowlingWins += 1;
+        }
+    } else {
+        room.consecutiveBowlingWins = 1;
+    }
+
+    room.lastTrickWinnerPlayerId = trickWinnerPlayerId;
     room.lastTrickWasAce = isAceWin;
 
+    const trumpKnown = room.trumpRevealed || isOpenOrDoubleOpen;
     if (room.consecutiveBowlingWins >= 2) {
-        return { roundOver: true, winnerTeam: targetTeam, reason: 'two_consecutive_non_ace_wins' };
+        if (!trumpKnown) {
+            room.consecutiveWinBanked = true;
+            return { roundOver: false };
+        }
+        return { roundOver: true, winnerTeam: targetTeam, reason: 'two_consecutive_non_ace_same_player_wins' };
     }
     return { roundOver: false };
+}
+
+function resetConsecutiveState(room) {
+    room.lastTrickWinnerPlayerId = null;
+    room.consecutiveBowlingWins = 0;
+    room.consecutiveWinBanked = false;
+    room.lastTrickWasAce = false;
+}
+
+function consumeBankedConsecutiveWin(room) {
+    if (!room.consecutiveWinBanked) return false;
+    room.consecutiveWinBanked = false;
+    return true;
 }
 
 export {
@@ -120,4 +153,6 @@ export {
     isTrumpCard,
     checkConsecutiveWins,
     getTargetConsecutiveTeam,
+    resetConsecutiveState,
+    consumeBankedConsecutiveWin,
 };

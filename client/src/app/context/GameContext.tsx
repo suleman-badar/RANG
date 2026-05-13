@@ -78,6 +78,15 @@ function scoresToTuple(scores: any): [number, number] {
   return [0, 0];
 }
 
+function sortHand(cards: Card[]): Card[] {
+  const suitOrder: Record<Suit, number> = { H: 0, D: 1, C: 2, S: 3 };
+  return [...cards].sort((left, right) => {
+    const suitDelta = suitOrder[left.suit] - suitOrder[right.suit];
+    if (suitDelta !== 0) return suitDelta;
+    return left.value - right.value;
+  });
+}
+
 function phaseToScreen(phase: string | undefined, fallback: Screen): Screen {
   switch (phase) {
     case "lobby":
@@ -128,6 +137,7 @@ export interface GameState {
 
   // Game state (visible)
   trickCards: TrickCard[];
+  hiddenPile: Card[];
   currentPlayerIndex: number;
   activeSuit: string | null;
   trumpSuit: string | null;
@@ -204,6 +214,7 @@ const INITIAL_STATE: GameState = {
   players: [],
   myHand: [],
   trickCards: [],
+  hiddenPile: [],
   currentPlayerIndex: 0,
   activeSuit: null,
   trumpSuit: null,
@@ -305,6 +316,49 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
   // Tracks the card we just optimistically removed so we can restore it on server rejection.
   const pendingPlayRef = useRef<Card | null>(null);
+  const trickClearTimerRef = useRef<number | null>(null);
+  const pendingTrickStateRef = useRef<Partial<GameState> | null>(null);
+  const hiddenPileHoldTimerRef = useRef<number | null>(null);
+  const hiddenPileClearPendingRef = useRef(false);
+
+  const clearTrickHold = useCallback(() => {
+    if (trickClearTimerRef.current !== null) {
+      window.clearTimeout(trickClearTimerRef.current);
+      trickClearTimerRef.current = null;
+    }
+    pendingTrickStateRef.current = null;
+  }, []);
+
+  const commitPendingTrickState = useCallback(() => {
+    const pending = pendingTrickStateRef.current;
+    if (!pending) return;
+    pendingTrickStateRef.current = null;
+    trickClearTimerRef.current = null;
+    setState((prev) => ({ ...prev, ...pending }));
+  }, []);
+
+  const clearHiddenPileHold = useCallback(() => {
+    if (hiddenPileHoldTimerRef.current !== null) {
+      window.clearTimeout(hiddenPileHoldTimerRef.current);
+      hiddenPileHoldTimerRef.current = null;
+    }
+    hiddenPileClearPendingRef.current = false;
+  }, []);
+
+  const startHiddenPileHold = useCallback(() => {
+    hiddenPileClearPendingRef.current = true;
+    if (hiddenPileHoldTimerRef.current !== null) {
+      window.clearTimeout(hiddenPileHoldTimerRef.current);
+    }
+
+    hiddenPileHoldTimerRef.current = window.setTimeout(() => {
+      hiddenPileHoldTimerRef.current = null;
+      if (hiddenPileClearPendingRef.current) {
+        hiddenPileClearPendingRef.current = false;
+        setState((prev) => ({ ...prev, hiddenPile: [] }));
+      }
+    }, 10000);
+  }, []);
 
   const update = useCallback((patch: Partial<GameState>) => {
     setState((prev) => ({ ...prev, ...patch }));
@@ -423,6 +477,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
         }));
       }
 
+      if (trickClearTimerRef.current !== null) {
+        pendingTrickStateRef.current = patch;
+        return;
+      }
+
       // Confirm the pending play was accepted — no need to restore.
       pendingPlayRef.current = null;
 
@@ -495,14 +554,23 @@ export function GameProvider({ children }: { children: ReactNode }) {
     });
 
     socket.on("trump_revealed", (data: any) => {
+      // Add the revealed trump card to hiddenPile and start the clear timer
+      if (data?.hiddenCard) {
+        startHiddenPileHold();
+      } else if (stateRef.current.hiddenPile.length > 0) {
+        startHiddenPileHold();
+      }
       const patch: Partial<GameState> = {
         trumpRevealed: true,
         trumpSuit: data?.trumpSuit ?? null,
         // Hidden card has been revealed — remove the face-down placeholder
         isHiddenBatter: false,
+        hiddenPile: data?.hiddenCard 
+          ? [...stateRef.current.hiddenPile, data.hiddenCard] 
+          : stateRef.current.hiddenPile,
       };
       if (Array.isArray(data?.batterNewHand)) {
-        patch.myHand = data.batterNewHand;
+        patch.myHand = sortHand(data.batterNewHand);
       }
       setState((prev) => ({ ...prev, ...patch }));
     });
@@ -511,12 +579,15 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
     socket.on("deal_hand", (data: any) => {
       const hand: Card[] = data.hand || data.cards || [];
+      const keepHiddenPileVisible = hiddenPileHoldTimerRef.current !== null;
       const patch: Partial<GameState> = {
-        myHand: hand,
+        myHand: sortHand(hand),
         screen: "game",
         // Server tells this player whether they are the hidden batter
         isHiddenBatter: Boolean(data.isHiddenBatter),
+        hiddenPile: keepHiddenPileVisible ? stateRef.current.hiddenPile : [],
       };
+      if (keepHiddenPileVisible) hiddenPileClearPendingRef.current = true;
       // Merge any extra game state that came with deal_hand
       const extra = mergeServerState(stateRef.current, data);
       Object.assign(patch, extra);
@@ -525,22 +596,58 @@ export function GameProvider({ children }: { children: ReactNode }) {
 
     // ─ Trick result ───────────────────────────────────────────────────────
 
-    socket.on("trick_result", (data: { winnerPlayerId: string; winnerPlayerIndex?: number; winningCard?: Card }) => {
+    socket.on("trick_result", (data: { winnerPlayerId: string; winnerPlayerIndex?: number; winningCard?: Card; trickCards?: Array<{ playerId: string; card: Card | null; hidden?: boolean }> }) => {
       const cur = stateRef.current;
       const winnerIndex =
         typeof data.winnerPlayerIndex === "number"
           ? data.winnerPlayerIndex
           : cur.players.find((p) => p.id === data.winnerPlayerId)?.playerIndex ?? 0;
 
+      const displayTrickCards = Array.isArray(data?.trickCards)
+        ? data.trickCards.map((slot: any) => {
+            const previousSlot = cur.trickCards.find((tc) => tc.playerId === slot.playerId);
+            const player = cur.players.find((p) => p.id === slot.playerId);
+            const battingTeam = cur.currentBatterIndex % 2;
+            const computedHidden = Boolean(
+              slot.card &&
+              !cur.trumpRevealed &&
+              cur.activeSuit &&
+              player &&
+              player.teamIndex === battingTeam &&
+              slot.card.suit !== cur.activeSuit
+            );
+
+            return {
+              playerId: slot.playerId,
+              card: slot.card ?? null,
+              hidden: previousSlot?.hidden ?? computedHidden,
+            };
+          })
+        : cur.trickCards;
+
+      const hiddenCards = Array.isArray(displayTrickCards)
+        ? displayTrickCards
+            .map((slot: any) => (slot?.hidden ? slot.card ?? null : null))
+            .filter(Boolean)
+        : [];
+
+      if (hiddenCards.length > 0 && cur.trumpRevealed) {
+        startHiddenPileHold();
+      }
+      clearTrickHold();
       update({
         lastTrickWinner: {
           playerId: data.winnerPlayerId,
           playerIndex: winnerIndex,
         },
         consecutiveBowlingWins: typeof (data as any)?.consecutiveBowlingWins === "number" ? (data as any).consecutiveBowlingWins : cur.consecutiveBowlingWins,
-        trickCards: [],
-        activeSuit: null,
+        trickCards: displayTrickCards,
+        hiddenPile: hiddenCards.length ? [...cur.hiddenPile, ...hiddenCards] : cur.hiddenPile,
       });
+
+      trickClearTimerRef.current = window.setTimeout(() => {
+        commitPendingTrickState();
+      }, 3000);
     });
 
     // ─ Round result ───────────────────────────────────────────────────────
@@ -558,6 +665,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
     // ─ Game over ──────────────────────────────────────────────────────────
 
     socket.on("game_over", (data: any) => {
+      clearTrickHold();
+      clearHiddenPileHold();
       const patch = mergeServerState(stateRef.current, data);
       patch.screen = "game_over";
       patch.serverPhase = "game_over";
@@ -581,7 +690,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
           // Put the card back only if it's not already in hand (safety check).
           myHand: prev.myHand.some((c) => c.id === rejected.id)
             ? prev.myHand
-            : [rejected, ...prev.myHand],
+            : sortHand([rejected, ...prev.myHand]),
           lastError: msg,
           lastErrorCode: data?.code ?? null,
         }));
@@ -610,10 +719,12 @@ export function GameProvider({ children }: { children: ReactNode }) {
     });
 
     return () => {
+      clearTrickHold();
+      clearHiddenPileHold();
       socket.disconnect();
       socketRef.current = null;
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [clearHiddenPileHold, clearTrickHold, startHiddenPileHold]);
 
   // ── Actions ──────────────────────────────────────────────────────────────
 
@@ -676,9 +787,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
   }, [update]);
 
   const leaveRoom = useCallback(() => {
+    clearTrickHold();
+    clearHiddenPileHold();
     clearSession();
     update({ ...INITIAL_STATE, socketConnected: stateRef.current.socketConnected });
-  }, [update]);
+  }, [clearHiddenPileHold, clearTrickHold, update]);
 
   const clearError = useCallback(() => update({ lastError: null, lastErrorCode: null }), [update]);
   const dismissTrickWinner = useCallback(() => update({ lastTrickWinner: null }), [update]);

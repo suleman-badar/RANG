@@ -16,8 +16,9 @@ function makeRoom() {
             { playerId: 'p2', card: null, hidden: false },
             { playerId: 'p3', card: null, hidden: false },
         ],
-        lastTrickWinnerIndex: null,
+        lastTrickWinnerPlayerId: null,
         consecutiveBowlingWins: 0,
+        consecutiveWinBanked: false,
         lastTrickWasAce: false,
         players: [
             { id: 'p0', playerIndex: 0, teamIndex: 0, hand: [] },
@@ -86,33 +87,63 @@ describe('turnEngine', () => {
 
     test('Consecutive win counter increments correctly', () => {
         const room = makeRoom();
-        // Batter team is team0 => bowling team is team1 (target).
-        room.lastTrickWinnerIndex = 0;
+        room.lastTrickWinnerPlayerId = 'p1';
         room.consecutiveBowlingWins = 0;
-        const res = checkConsecutiveWins(room, 1, { suit: 'H', value: 13, id: 'H-13' });
+        const res = checkConsecutiveWins(room, 'p1', { suit: 'H', value: 13, id: 'H-13' });
         expect(res.roundOver).toBe(false);
         expect(room.consecutiveBowlingWins).toBe(1);
     });
 
-    test('Ace exception: two consecutive bowling wins with aces do NOT trigger round end', () => {
+    test('Same team but different player does not count as consecutive', () => {
         const room = makeRoom();
-        // First target win with Ace
-        room.lastTrickWinnerIndex = 0;
-        checkConsecutiveWins(room, 1, { suit: 'H', value: 14, id: 'H-14' });
-        room.lastTrickWinnerIndex = 1;
-        // Second target win with Ace should not increment
-        const res = checkConsecutiveWins(room, 1, { suit: 'D', value: 14, id: 'D-14' });
+        room.lastTrickWinnerPlayerId = 'p1';
+        room.consecutiveBowlingWins = 1;
+
+        const res = checkConsecutiveWins(room, 'p3', { suit: 'D', value: 12, id: 'D-12' });
+
         expect(res.roundOver).toBe(false);
         expect(room.consecutiveBowlingWins).toBe(1);
     });
 
-    test('Two consecutive bowling wins with non-ace cards DO trigger round end', () => {
+    test('Open mode ace-ace extension keeps the game alive until Trick 3', () => {
         const room = makeRoom();
-        room.lastTrickWinnerIndex = 0;
-        checkConsecutiveWins(room, 1, { suit: 'H', value: 13, id: 'H-13' });
-        room.lastTrickWinnerIndex = 1;
-        const res = checkConsecutiveWins(room, 1, { suit: 'D', value: 12, id: 'D-12' });
+        room.openMode = true;
+        room.openDeclaredByTeam = 0;
+        room.currentTurn = 2;
+        room.lastTrickWinnerPlayerId = 'p1';
+        room.lastTrickWasAce = true;
+        room.consecutiveBowlingWins = 1;
+
+        const second = checkConsecutiveWins(room, 'p1', { suit: 'D', value: 14, id: 'D-14' });
+        expect(second.roundOver).toBe(false);
+        expect(room.consecutiveBowlingWins).toBe(1);
+
+        room.currentTurn = 3;
+        const third = checkConsecutiveWins(room, 'p1', { suit: 'H', value: 13, id: 'H-13' });
+        expect(third.roundOver).toBe(true);
+        expect(third.winnerTeam).toBe(1);
+    });
+
+    test('Normal mode still ends after two same-player bowling wins, even with aces', () => {
+        const room = makeRoom();
+        room.trumpRevealed = true;
+        room.lastTrickWinnerPlayerId = 'p1';
+        room.lastTrickWasAce = true;
+        room.consecutiveBowlingWins = 1;
+
+        const res = checkConsecutiveWins(room, 'p1', { suit: 'D', value: 14, id: 'D-14' });
         expect(res.roundOver).toBe(true);
         expect(res.winnerTeam).toBe(1);
+    });
+
+    test('Consecutive non-ace wins are banked when trump is hidden', () => {
+        const room = makeRoom();
+        room.lastTrickWinnerPlayerId = 'p1';
+        room.consecutiveBowlingWins = 1;
+        room.trumpRevealed = false;
+
+        const res = checkConsecutiveWins(room, 'p1', { suit: 'D', value: 13, id: 'D-13' });
+        expect(res.roundOver).toBe(false);
+        expect(room.consecutiveWinBanked).toBe(true);
     });
 });
