@@ -226,7 +226,7 @@ export function GameScreen() {
 
           {/* Center: Trick area */}
           <div className="flex-1 flex flex-col items-center justify-center px-4 gap-3">
-            <div className="-mb-16">
+            <div className="mb-16">
               <HiddenPileArea cards={hiddenPile} revealed={trumpRevealed} />
             </div>
             <TrickArea

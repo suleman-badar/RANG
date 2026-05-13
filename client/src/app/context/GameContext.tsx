@@ -613,14 +613,14 @@ export function GameProvider({ children }: { children: ReactNode }) {
               !cur.trumpRevealed &&
               cur.activeSuit &&
               player &&
-              player.teamIndex === battingTeam &&
+              player.playerIndex === cur.currentBatterIndex &&
               slot.card.suit !== cur.activeSuit
             );
 
             return {
               playerId: slot.playerId,
               card: slot.card ?? null,
-              hidden: previousSlot?.hidden ?? computedHidden,
+              hidden: cur.trumpRevealed ? false : (previousSlot?.hidden ?? computedHidden),
             };
           })
         : cur.trickCards;
