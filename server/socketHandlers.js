@@ -514,8 +514,10 @@ function registerSocketHandlers(io, socket) {
 
         const slot = room.trickCards.find((t) => t.playerId === player.id);
         slot.card = card;
-        const battingTeam = getBatterTeamIndex(room);
-        const hideFromBowling = !room.trumpRevealed && player.teamIndex === battingTeam && room.activeSuit && card.suit !== room.activeSuit;
+        const hideFromBowling = !room.trumpRevealed
+        && player.playerIndex === room.currentBatterIndex
+        && room.activeSuit
+        && card.suit !== room.activeSuit;
         slot.hidden = hideFromBowling;
 
         // Advance to next seat within the trick
