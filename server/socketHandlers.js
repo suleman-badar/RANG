@@ -55,16 +55,21 @@ function initTrickCards(room) {
 }
 
 function buildTrickCardsForViewer(room, viewerPlayerId) {
-    const viewer = room.players.find((p) => p.id === viewerPlayerId);
-    const bowlingTeam = getBowlingTeamIndex(room);
-    const viewerIsBowling = viewer ? viewer.teamIndex === bowlingTeam : false;
-
     return room.trickCards.map((slot) => {
         if (!slot.card) return { playerId: slot.playerId, card: null };
         if (room.trumpRevealed) return { playerId: slot.playerId, card: slot.card };
-        if (!viewerIsBowling) return { playerId: slot.playerId, card: slot.card };
-        if (slot.hidden) return { playerId: slot.playerId, card: null, hidden: true };
+        if (slot.hidden && slot.playerId !== viewerPlayerId) return { playerId: slot.playerId, card: null, hidden: true };
         return { playerId: slot.playerId, card: slot.card };
+    });
+}
+
+function buildTrickResultCardsForViewer(room, viewerPlayerId) {
+    return room.trickCards.map((slot) => {
+        if (!slot.card) return { playerId: slot.playerId, card: null };
+        if (room.trumpRevealed || !slot.hidden || slot.playerId === viewerPlayerId) {
+            return { playerId: slot.playerId, card: slot.card, hidden: false };
+        }
+        return { playerId: slot.playerId, card: slot.card, hidden: true };
     });
 }
 
@@ -510,11 +515,11 @@ function registerSocketHandlers(io, socket) {
 
         const slot = room.trickCards.find((t) => t.playerId === player.id);
         slot.card = card;
-        const hideFromBowling = !room.trumpRevealed
+        const hideUntilTrumpRevealed = !room.trumpRevealed
             && player.playerIndex === room.currentBatterIndex
             && room.activeSuit
             && card.suit !== room.activeSuit;
-        slot.hidden = hideFromBowling;
+        slot.hidden = hideUntilTrumpRevealed;
 
         // Advance to next seat within the trick
         room.currentPlayerIndex = (room.currentPlayerIndex + 3) % 4;
@@ -527,7 +532,6 @@ function registerSocketHandlers(io, socket) {
                 const hidden = revealTrump(room);
                 if (hidden) {
                     emitTrumpRevealed(io, room, hidden);
-                    if (maybeEndRoundForBankedConsecutiveWin(io, room)) return;
                 }
             }
         }
@@ -537,8 +541,7 @@ function registerSocketHandlers(io, socket) {
         const trick = resolveTrick(room);
         if (!trick) return;
 
-        // Determine winner & broadcast full trick
-        const trickCards = room.trickCards.map((t) => ({ playerId: t.playerId, card: t.card }));
+        // Determine winner & broadcast each player's allowed trick view.
         const winner = room.players.find((p) => p.id === trick.winnerPlayerId);
         const winnerTeam = winner ? winner.teamIndex : 0;
 
@@ -546,11 +549,14 @@ function registerSocketHandlers(io, socket) {
 
         const isExcludedOpenTurn1 = (room.openMode || room.doubleOpenMode) && room.currentTurn === 1;
 
-        io.to(room.roomCode).emit('trick_result', {
-            winnerPlayerId: trick.winnerPlayerId,
-            trickCards,
-            consecutiveBowlingWins: room.consecutiveBowlingWins,
-        });
+        for (const viewer of room.players) {
+            if (!viewer.connected) continue;
+            io.to(viewer.socketId).emit('trick_result', {
+                winnerPlayerId: trick.winnerPlayerId,
+                trickCards: buildTrickResultCardsForViewer(room, viewer.id),
+                consecutiveBowlingWins: room.consecutiveBowlingWins,
+            });
+        }
 
         // Round completion rules
         const battingTeamIndex = getBatterTeamIndex(room);
