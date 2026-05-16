@@ -8,7 +8,8 @@
     "start": "node index.js",
     "dev": "node index.js",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
-    "smoke": "node smoke.js"
+    "smoke": "node smoke.js",
+    "stress:rounds": "node roundStress.js"
   },
   "dependencies": {
     "express": "^4.19.2",
