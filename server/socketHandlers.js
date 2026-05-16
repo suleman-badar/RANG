@@ -14,6 +14,55 @@ function emitError(socket, code, message) {
     socket.emit('error', { code, message });
 }
 
+function cardLabel(card) {
+    if (!card) return null;
+    return `${card.suit}-${card.value}`;
+}
+
+function logInvalidPlay(room, player, cardId, errorCode) {
+    const attemptedCard = player.hand.find((c) => c.id === cardId) || null;
+    const currentPlayer = room.players.find((p) => p.playerIndex === room.currentPlayerIndex) || null;
+    const activeSuitCards = room.activeSuit ? player.hand.filter((c) => c.suit === room.activeSuit).map(cardLabel) : [];
+    const payload = {
+        code: errorCode,
+        roomCode: room.roomCode,
+        phase: room.phase,
+        round: room.currentRound,
+        turn: room.currentTurn,
+        activeSuit: room.activeSuit,
+        trumpRevealed: room.trumpRevealed,
+        trumpSuit: room.trumpSuit,
+        player: {
+            id: player.id,
+            name: player.name,
+            playerIndex: player.playerIndex,
+            teamIndex: player.teamIndex,
+        },
+        expectedTurn: currentPlayer
+            ? {
+                id: currentPlayer.id,
+                name: currentPlayer.name,
+                playerIndex: currentPlayer.playerIndex,
+                teamIndex: currentPlayer.teamIndex,
+            }
+            : null,
+        attemptedCard: cardLabel(attemptedCard),
+        attemptedCardId: cardId,
+        handSize: player.hand.length,
+        handSuits: player.hand.map((c) => c.suit),
+        activeSuitCards,
+        trickCards: room.trickCards.map((slot) => ({
+            playerId: slot.playerId,
+            card: cardLabel(slot.card),
+            hidden: !!slot.hidden,
+            dead: !!slot.dead,
+            playedAfterTrumpReveal: !!slot.playedAfterTrumpReveal,
+        })),
+    };
+
+    console.warn(`Invalid play diagnostic ${JSON.stringify(payload)}`);
+}
+
 function roomPlayersPublic(room) {
     return room.players.map((p) => ({
         id: p.id,
@@ -524,7 +573,7 @@ function registerSocketHandlers(io, socket) {
         const check = validatePlay(room, player.id, cardId);
         if (!check.valid) {
             emitError(socket, check.errorCode, 'Invalid play');
-            console.log(`Invalid play attempt by player ${player.id} in room ${room.roomCode}: ${check.errorCode}`);
+            logInvalidPlay(room, player, cardId, check.errorCode);
             return;
         }
 
