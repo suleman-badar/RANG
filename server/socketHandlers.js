@@ -51,15 +51,16 @@ function isHiddenBatterFor(room, player) {
 }
 
 function initTrickCards(room) {
-    room.trickCards = room.players.map((p) => ({ playerId: p.id, card: null, hidden: false }));
+    room.trickCards = room.players.map((p) => ({ playerId: p.id, card: null, hidden: false, dead: false, playedAfterTrumpReveal: false }));
+    room.trumpRevealedThisTrick = false;
 }
 
 function buildTrickCardsForViewer(room, viewerPlayerId) {
     return room.trickCards.map((slot) => {
         if (!slot.card) return { playerId: slot.playerId, card: null };
-        if (room.trumpRevealed) return { playerId: slot.playerId, card: slot.card };
-        if (slot.hidden && slot.playerId !== viewerPlayerId) return { playerId: slot.playerId, card: null, hidden: true };
-        return { playerId: slot.playerId, card: slot.card };
+        if (room.trumpRevealed) return { playerId: slot.playerId, card: slot.card, dead: !!slot.dead };
+        if (slot.hidden && slot.playerId !== viewerPlayerId) return { playerId: slot.playerId, card: null, hidden: true, dead: !!slot.dead };
+        return { playerId: slot.playerId, card: slot.card, dead: !!slot.dead };
     });
 }
 
@@ -67,10 +68,30 @@ function buildTrickResultCardsForViewer(room, viewerPlayerId) {
     return room.trickCards.map((slot) => {
         if (!slot.card) return { playerId: slot.playerId, card: null };
         if (room.trumpRevealed || !slot.hidden || slot.playerId === viewerPlayerId) {
-            return { playerId: slot.playerId, card: slot.card, hidden: false };
+            return { playerId: slot.playerId, card: slot.card, hidden: false, dead: !!slot.dead };
         }
-        return { playerId: slot.playerId, card: slot.card, hidden: true };
+        return { playerId: slot.playerId, card: slot.card, hidden: true, dead: !!slot.dead };
     });
+}
+
+function markDeadCardsAfterTrumpReveal(room) {
+    for (const slot of room.trickCards) {
+        if (!slot.card) continue;
+        if (slot.playedAfterTrumpReveal) continue;
+        if (slot.card.suit !== room.activeSuit) {
+            slot.dead = true;
+            slot.hidden = false;
+        }
+    }
+}
+
+function classifyPlayedCard(room, slot) {
+    if (!slot.card || !room.activeSuit) return;
+    if (!room.trumpRevealed) return;
+    if (slot.card.suit === room.activeSuit) return;
+    if (slot.card.suit === room.trumpSuit && slot.playedAfterTrumpReveal) return;
+    slot.dead = true;
+    slot.hidden = false;
 }
 
 function emitGameState(io, room) {
@@ -155,6 +176,7 @@ function dealForRound(room) {
     room.currentTurn = 1;
     room.currentPlayerIndex = room.currentBatterIndex;
     room.activeSuit = null;
+    room.trumpRevealedThisTrick = false;
     resetConsecutiveState(room);
     room.phase = 'open_window';
 
@@ -515,11 +537,14 @@ function registerSocketHandlers(io, socket) {
 
         const slot = room.trickCards.find((t) => t.playerId === player.id);
         slot.card = card;
+        slot.playedAfterTrumpReveal = room.trumpRevealed;
+        slot.dead = false;
         const hideUntilTrumpRevealed = !room.trumpRevealed
             && player.playerIndex === room.currentBatterIndex
             && room.activeSuit
             && card.suit !== room.activeSuit;
         slot.hidden = hideUntilTrumpRevealed;
+        classifyPlayedCard(room, slot);
 
         // Advance to next seat within the trick
         room.currentPlayerIndex = (room.currentPlayerIndex + 3) % 4;
@@ -531,6 +556,8 @@ function registerSocketHandlers(io, socket) {
             if (nextPlayer.teamIndex === bowlingTeam && !hasActiveSuit) {
                 const hidden = revealTrump(room);
                 if (hidden) {
+                    room.trumpRevealedThisTrick = true;
+                    markDeadCardsAfterTrumpReveal(room);
                     emitTrumpRevealed(io, room, hidden);
                 }
             }
@@ -545,7 +572,9 @@ function registerSocketHandlers(io, socket) {
         const winner = room.players.find((p) => p.id === trick.winnerPlayerId);
         const winnerTeam = winner ? winner.teamIndex : 0;
 
-        const consecutiveCheck = checkConsecutiveWins(room, trick.winnerPlayerId, trick.winningCard);
+        const consecutiveCheck = room.trumpRevealedThisTrick
+            ? { roundOver: false }
+            : checkConsecutiveWins(room, trick.winnerPlayerId, trick.winningCard);
 
         const isExcludedOpenTurn1 = (room.openMode || room.doubleOpenMode) && room.currentTurn === 1;
 

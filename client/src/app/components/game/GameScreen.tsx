@@ -511,7 +511,7 @@ function TrickArea({
 
     return (
       <div className={`flex flex-col items-center gap-1`}>
-        {slot?.card && !slot.hidden ? (
+        {slot?.card && !slot.hidden && !slot.dead ? (
           <PlayingCard card={slot.card} size="sm" />
         ) : slot?.hidden ? (
           <CardBack size="sm" />
@@ -532,9 +532,10 @@ function TrickArea({
   const rightPlayer = players.find((p) => p.playerIndex === rightIdx);
   const leftPlayer = players.find((p) => p.playerIndex === leftIdx);
   const me = players.find((p) => p.playerIndex === myPlayerIndex);
+  const wastedCards = trickCards.filter((slot) => slot?.card && slot?.dead);
 
   return (
-    <div className="relative flex flex-col items-center gap-2 w-48">
+    <div className="relative flex flex-col items-center gap-2 w-56">
       {/* Active suit indicator */}
       {activeSuit && (
         <div className={`absolute -top-6 text-xs px-2 py-0.5 rounded ${isRedSuit(activeSuit) ? "bg-red-900/50 text-red-400" : "bg-gray-800 text-gray-400"}`}>
@@ -557,6 +558,27 @@ function TrickArea({
 
       {/* Bottom (me) */}
       <div>{renderSlot(myPlayerIndex, me?.name ?? "You")}</div>
+
+      <WastedCardsArea cards={wastedCards.map((slot) => slot.card)} />
+    </div>
+  );
+}
+
+function WastedCardsArea({ cards }: { cards: Card[] }) {
+  if (!cards.length) return null;
+
+  return (
+    <div className="mt-1 flex flex-col items-center gap-1">
+      <div className="text-[10px] uppercase tracking-[0.22em] text-gray-500">
+        Wasted
+      </div>
+      <div className="flex items-center justify-center gap-1">
+        {cards.map((card) => (
+          <div key={card.id} className="opacity-55 grayscale">
+            <PlayingCard card={card} size="sm" />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

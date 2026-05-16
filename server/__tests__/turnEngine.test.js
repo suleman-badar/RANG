@@ -85,6 +85,45 @@ describe('turnEngine', () => {
         expect(r.winnerPlayerId).toBe('p1');
     });
 
+    test('Trump reveal trick: pre-reveal off-suit card matching trump is dead and cannot win', () => {
+        const room = makeRoom();
+        room.activeSuit = 'S';
+        room.trumpRevealed = true;
+        room.trumpSuit = 'H';
+        room.trickCards[0].card = { suit: 'S', value: 10, id: 'S-10' };
+        room.trickCards[0].playedAfterTrumpReveal = false;
+        room.trickCards[1].card = { suit: 'S', value: 11, id: 'S-11' };
+        room.trickCards[1].playedAfterTrumpReveal = false;
+        room.trickCards[2].card = { suit: 'H', value: 14, id: 'H-14' };
+        room.trickCards[2].playedAfterTrumpReveal = false;
+        room.trickCards[2].dead = true;
+        room.trickCards[3].card = { suit: 'D', value: 2, id: 'D-2' };
+        room.trickCards[3].playedAfterTrumpReveal = true;
+        room.trickCards[3].dead = true;
+
+        const r = resolveTrick(room);
+        expect(r.winnerPlayerId).toBe('p1');
+    });
+
+    test('Trump reveal trick: post-reveal trump cuts the original suit', () => {
+        const room = makeRoom();
+        room.activeSuit = 'S';
+        room.trumpRevealed = true;
+        room.trumpSuit = 'H';
+        room.trickCards[0].card = { suit: 'S', value: 14, id: 'S-14' };
+        room.trickCards[0].playedAfterTrumpReveal = false;
+        room.trickCards[1].card = { suit: 'D', value: 3, id: 'D-3' };
+        room.trickCards[1].playedAfterTrumpReveal = false;
+        room.trickCards[1].dead = true;
+        room.trickCards[2].card = { suit: 'S', value: 13, id: 'S-13' };
+        room.trickCards[2].playedAfterTrumpReveal = false;
+        room.trickCards[3].card = { suit: 'H', value: 2, id: 'H-2' };
+        room.trickCards[3].playedAfterTrumpReveal = true;
+
+        const r = resolveTrick(room);
+        expect(r.winnerPlayerId).toBe('p3');
+    });
+
     test('Consecutive win counter increments correctly', () => {
         const room = makeRoom();
         room.lastTrickWinnerPlayerId = 'p1';

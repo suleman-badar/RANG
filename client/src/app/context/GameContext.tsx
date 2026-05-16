@@ -26,6 +26,7 @@ export interface TrickCard {
   playerId: string;
   card: Card | null;
   hidden?: boolean;
+  dead?: boolean;
 }
 
 export interface Player {
@@ -554,10 +555,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
     });
 
     socket.on("trump_revealed", (data: any) => {
-      // Add the revealed trump card to hiddenPile and start the clear timer
-      if (data?.hiddenCard) {
-        startHiddenPileHold();
-      } else if (stateRef.current.hiddenPile.length > 0) {
+      // Only reveal/hold cards that were already piled before trump opened.
+      if (stateRef.current.hiddenPile.length > 0) {
         startHiddenPileHold();
       }
       const patch: Partial<GameState> = {
@@ -565,9 +564,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         trumpSuit: data?.trumpSuit ?? null,
         // Hidden card has been revealed — remove the face-down placeholder
         isHiddenBatter: false,
-        hiddenPile: data?.hiddenCard 
-          ? [...stateRef.current.hiddenPile, data.hiddenCard] 
-          : stateRef.current.hiddenPile,
+        hiddenPile: stateRef.current.hiddenPile,
       };
       if (Array.isArray(data?.batterNewHand)) {
         patch.myHand = sortHand(data.batterNewHand);
@@ -607,27 +604,29 @@ export function GameProvider({ children }: { children: ReactNode }) {
         ? data.trickCards.map((slot: any) => {
             const previousSlot = cur.trickCards.find((tc) => tc.playerId === slot.playerId);
             const player = cur.players.find((p) => p.id === slot.playerId);
-            const battingTeam = cur.currentBatterIndex % 2;
-            const computedHidden = Boolean(
+            const fallbackHidden = Boolean(
               slot.card &&
               !cur.trumpRevealed &&
               cur.activeSuit &&
               player &&
               player.playerIndex === cur.currentBatterIndex &&
+              slot.playerId !== cur.myPlayerId &&
               slot.card.suit !== cur.activeSuit
             );
+            const serverHidden = typeof slot.hidden === "boolean" ? slot.hidden : undefined;
 
             return {
               playerId: slot.playerId,
               card: slot.card ?? null,
-              hidden: cur.trumpRevealed ? false : (previousSlot?.hidden ?? computedHidden),
+              hidden: serverHidden ?? previousSlot?.hidden ?? fallbackHidden,
+              dead: Boolean(slot.dead),
             };
           })
         : cur.trickCards;
 
       const hiddenCards = Array.isArray(displayTrickCards)
         ? displayTrickCards
-            .map((slot: any) => (slot?.hidden ? slot.card ?? null : null))
+            .map((slot: any) => (slot?.hidden && !slot?.dead ? slot.card ?? null : null))
             .filter(Boolean)
         : [];
 
