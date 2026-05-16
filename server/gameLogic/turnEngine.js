@@ -28,18 +28,25 @@ function validatePlay(room, playerId, cardId) {
 
 function resolveTrick(room) {
     const played = room.trickCards
-        .map((t) => ({ playerId: t.playerId, card: t.card }))
+        .map((t) => ({
+            playerId: t.playerId,
+            card: t.card,
+            dead: !!t.dead,
+            playedAfterTrumpReveal: t.playedAfterTrumpReveal === undefined ? !!room.trumpRevealed : !!t.playedAfterTrumpReveal,
+        }))
         .filter((x) => x.card);
     if (played.length !== 4) return null;
 
     const activeSuit = room.activeSuit;
     const trumpSuit = room.trumpRevealed ? room.trumpSuit : null;
+    const live = played.filter((x) => !x.dead);
+    if (!live.length) return null;
 
     let best = null;
-    for (const entry of played) {
+    for (const entry of live) {
         const c = entry.card;
-        const cIsTrump = isTrumpCard(c, trumpSuit);
-        const bestIsTrump = best ? isTrumpCard(best.card, trumpSuit) : false;
+        const cIsTrump = entry.playedAfterTrumpReveal && isTrumpCard(c, trumpSuit);
+        const bestIsTrump = best ? best.playedAfterTrumpReveal && isTrumpCard(best.card, trumpSuit) : false;
 
         if (!best) {
             best = entry;
