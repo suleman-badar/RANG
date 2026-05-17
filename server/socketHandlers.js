@@ -645,12 +645,13 @@ function registerSocketHandlers(io, socket) {
             && card.suit !== room.activeSuit;
         slot.hidden = hideUntilTrumpRevealed;
         classifyPlayedCard(room, slot);
+        const playedCardsInTrick = room.trickCards.filter((t) => t.card).length;
 
         // Advance to next seat within the trick
         room.currentPlayerIndex = (room.currentPlayerIndex + 3) % 4;
 
         const nextPlayer = room.players[room.currentPlayerIndex];
-        if (!room.trumpRevealed && room.activeSuit && nextPlayer) {
+        if (playedCardsInTrick < 4 && !room.trumpRevealed && room.activeSuit && nextPlayer) {
             const bowlingTeam = getBowlingTeamIndex(room);
             const hasActiveSuit = nextPlayer.hand.some((c) => c.suit === room.activeSuit);
             if (nextPlayer.teamIndex === bowlingTeam && !hasActiveSuit) {
