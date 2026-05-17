@@ -133,7 +133,8 @@ function checkConsecutiveWins(room, trickWinnerPlayerId, winningCard) {
     const trumpKnown = room.trumpRevealed || isOpenOrDoubleOpen;
     if (room.consecutiveBowlingWins >= 2) {
         if (!trumpKnown) {
-            room.consecutiveWinBanked = true;
+            room.consecutiveBowlingWins = 1;
+            room.consecutiveWinBanked = false;
             return { roundOver: false };
         }
         return { roundOver: true, winnerTeam: targetTeam, reason: 'two_consecutive_non_ace_same_player_wins' };
@@ -148,12 +149,6 @@ function resetConsecutiveState(room) {
     room.lastTrickWasAce = false;
 }
 
-function consumeBankedConsecutiveWin(room) {
-    if (!room.consecutiveWinBanked) return false;
-    room.consecutiveWinBanked = false;
-    return true;
-}
-
 export {
     validatePlay,
     resolveTrick,
@@ -161,5 +156,4 @@ export {
     checkConsecutiveWins,
     getTargetConsecutiveTeam,
     resetConsecutiveState,
-    consumeBankedConsecutiveWin,
 };

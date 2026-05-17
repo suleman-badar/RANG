@@ -2,7 +2,7 @@ import { createRoom, joinRoom, getRoom, findPlayerBySocket, findPlayerById, cons
 
 import { createDeck, shuffle } from './gameLogic/deck.js';
 import { runTossStep } from './gameLogic/toss.js';
-import { validatePlay, resolveTrick, checkConsecutiveWins, resetConsecutiveState, consumeBankedConsecutiveWin } from './gameLogic/turnEngine.js';
+import { validatePlay, resolveTrick, checkConsecutiveWins, resetConsecutiveState } from './gameLogic/turnEngine.js';
 import { revealTrump } from './gameLogic/trumpEngine.js';
 import { canDeclareOpen, executeOpen, canDeclareDoubleOpen, executeDoubleOpen } from './gameLogic/openMode.js';
 import { calculatePoints } from './gameLogic/scoring.js';
@@ -316,13 +316,6 @@ function completeRound(io, room, winnerTeam, reason) {
         roundScores: room.roundScores,
     });
     emitGameState(io, room);
-}
-
-function maybeEndRoundForBankedConsecutiveWin(io, room) {
-    if (!consumeBankedConsecutiveWin(room)) return false;
-    const bowlingTeam = getBowlingTeamIndex(room);
-    completeRound(io, room, bowlingTeam, 'banked_consecutive_non_ace_same_player_wins');
-    return true;
 }
 
 function maybeAdvanceToNextRound(io, room) {

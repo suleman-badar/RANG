@@ -175,7 +175,7 @@ describe('turnEngine', () => {
         expect(res.winnerTeam).toBe(1);
     });
 
-    test('Consecutive non-ace wins are banked when trump is hidden', () => {
+    test('Hidden-trump consecutive wins remember only the latest same-player win until trump is known', () => {
         const room = makeRoom();
         room.lastTrickWinnerPlayerId = 'p1';
         room.consecutiveBowlingWins = 1;
@@ -183,7 +183,86 @@ describe('turnEngine', () => {
 
         const res = checkConsecutiveWins(room, 'p1', { suit: 'D', value: 13, id: 'D-13' });
         expect(res.roundOver).toBe(false);
-        expect(room.consecutiveWinBanked).toBe(true);
+        expect(room.consecutiveWinBanked).toBe(false);
+        expect(room.lastTrickWinnerPlayerId).toBe('p1');
+        expect(room.consecutiveBowlingWins).toBe(1);
+    });
+
+    test('First post-reveal bowling win does not end the round without a previous same-player win', () => {
+        const room = makeRoom();
+        room.trumpRevealed = true;
+        room.trumpSuit = 'S';
+
+        const res = checkConsecutiveWins(room, 'p1', { suit: 'D', value: 12, id: 'D-12' });
+
+        expect(res.roundOver).toBe(false);
+        expect(room.lastTrickWinnerPlayerId).toBe('p1');
+        expect(room.consecutiveBowlingWins).toBe(1);
+    });
+
+    test('First post-reveal bowling win does not end the round if previous bowling win was a different player', () => {
+        const room = makeRoom();
+        room.trumpRevealed = true;
+        room.trumpSuit = 'S';
+        room.lastTrickWinnerPlayerId = 'p3';
+        room.consecutiveBowlingWins = 1;
+
+        const res = checkConsecutiveWins(room, 'p1', { suit: 'D', value: 12, id: 'D-12' });
+
+        expect(res.roundOver).toBe(false);
+        expect(room.lastTrickWinnerPlayerId).toBe('p1');
+        expect(room.consecutiveBowlingWins).toBe(1);
+    });
+
+    test('First post-reveal bowling win ends only when same player won the immediately previous counted trick before reveal', () => {
+        const room = makeRoom();
+        room.lastTrickWinnerPlayerId = 'p1';
+        room.consecutiveBowlingWins = 1;
+        room.trumpRevealed = false;
+
+        const hiddenSecond = checkConsecutiveWins(room, 'p1', { suit: 'D', value: 13, id: 'D-13' });
+        expect(hiddenSecond.roundOver).toBe(false);
+        expect(room.consecutiveBowlingWins).toBe(1);
+
+        room.trumpRevealed = true;
+        room.trumpSuit = 'S';
+        const postReveal = checkConsecutiveWins(room, 'p1', { suit: 'C', value: 12, id: 'C-12' });
+
+        expect(postReveal.roundOver).toBe(true);
+        expect(postReveal.winnerTeam).toBe(1);
+        expect(postReveal.reason).toBe('two_consecutive_non_ace_same_player_wins');
+        expect(room.consecutiveBowlingWins).toBe(2);
+    });
+
+    test('Older same-player win before reveal does not count if another bowler won the immediately previous counted trick', () => {
+        const room = makeRoom();
+        room.trumpRevealed = false;
+
+        room.currentTurn = 1;
+        const first = checkConsecutiveWins(room, 'p1', { suit: 'H', value: 13, id: 'H-13' });
+        expect(first.roundOver).toBe(false);
+        expect(room.lastTrickWinnerPlayerId).toBe('p1');
+        expect(room.consecutiveBowlingWins).toBe(1);
+
+        room.currentTurn = 2;
+        const second = checkConsecutiveWins(room, 'p3', { suit: 'D', value: 12, id: 'D-12' });
+        expect(second.roundOver).toBe(false);
+        expect(room.lastTrickWinnerPlayerId).toBe('p3');
+        expect(room.consecutiveBowlingWins).toBe(1);
+
+        // Trick 3 is the trump-reveal trick and is ignored by socketHandlers,
+        // even if p1 wins it. The previous counted trick remains p3's Trick 2 win.
+        room.currentTurn = 3;
+        room.trumpRevealed = true;
+        room.trumpSuit = 'S';
+        expect(room.lastTrickWinnerPlayerId).toBe('p3');
+        expect(room.consecutiveBowlingWins).toBe(1);
+
+        room.currentTurn = 4;
+        const fourth = checkConsecutiveWins(room, 'p1', { suit: 'C', value: 11, id: 'C-11' });
+        expect(fourth.roundOver).toBe(false);
+        expect(room.lastTrickWinnerPlayerId).toBe('p1');
+        expect(room.consecutiveBowlingWins).toBe(1);
     });
 
     test('Trump reveal trick is ignored without breaking a same-player bowling win streak', () => {
