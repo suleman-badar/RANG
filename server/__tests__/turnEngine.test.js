@@ -185,4 +185,29 @@ describe('turnEngine', () => {
         expect(res.roundOver).toBe(false);
         expect(room.consecutiveWinBanked).toBe(true);
     });
+
+    test('Trump reveal trick is ignored without breaking a same-player bowling win streak', () => {
+        const room = makeRoom();
+        room.currentTurn = 1;
+        room.trumpRevealed = false;
+
+        const first = checkConsecutiveWins(room, 'p1', { suit: 'H', value: 13, id: 'H-13' });
+        expect(first.roundOver).toBe(false);
+        expect(room.lastTrickWinnerPlayerId).toBe('p1');
+        expect(room.consecutiveBowlingWins).toBe(1);
+
+        // The reveal trick is skipped by socketHandlers when room.trumpRevealedThisTrick is true.
+        room.currentTurn = 2;
+        room.trumpRevealed = true;
+        room.trumpSuit = 'S';
+        expect(room.lastTrickWinnerPlayerId).toBe('p1');
+        expect(room.consecutiveBowlingWins).toBe(1);
+
+        room.currentTurn = 3;
+        const third = checkConsecutiveWins(room, 'p1', { suit: 'D', value: 12, id: 'D-12' });
+        expect(third.roundOver).toBe(true);
+        expect(third.winnerTeam).toBe(1);
+        expect(third.reason).toBe('two_consecutive_non_ace_same_player_wins');
+        expect(room.consecutiveBowlingWins).toBe(2);
+    });
 });

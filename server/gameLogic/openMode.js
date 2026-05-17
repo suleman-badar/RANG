@@ -11,6 +11,7 @@ function canDeclareOpen(room, playerId) {
 
     if (room.openMode) return { valid: false, errorCode: 'INVALID_ACTION' };
     if (room.doubleOpenMode) return { valid: false, errorCode: 'INVALID_ACTION' };
+    if (room.trumpRevealed) return { valid: false, errorCode: 'INVALID_ACTION' };
     if (room.currentTurn !== 1) return { valid: false, errorCode: 'INVALID_ACTION' };
     if (player.playerIndex !== room.currentPlayerIndex) return { valid: false, errorCode: 'WRONG_TURN' };
     if (room.openCountForBatter >= 3) return { valid: false, errorCode: 'INVALID_ACTION' };

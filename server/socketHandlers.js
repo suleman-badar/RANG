@@ -273,8 +273,7 @@ function dealForRound(room) {
 function isReshuffleWindowOpen(room) {
     if (room.phase !== 'open_window') return false;
     if (room.currentTurn !== 1) return false;
-    if (room.activeSuit !== null) return false;
-    return room.trickCards.every((t) => t.card === null);
+    return true;
 }
 
 function canReshufflePlayer(player, room) {
@@ -288,6 +287,8 @@ function canReshufflePlayer(player, room) {
     }
     if (!isReshuffleWindowOpen(room)) return { ok: false, code: 'RESHUFFLE_NOT_ELIGIBLE' };
     if (room.openMode || room.doubleOpenMode) return { ok: false, code: 'RESHUFFLE_NOT_ELIGIBLE' };
+    const slot = room.trickCards.find((t) => t.playerId === player.id);
+    if (slot && slot.card) return { ok: false, code: 'RESHUFFLE_NOT_ELIGIBLE' };
     return { ok: true };
 }
 

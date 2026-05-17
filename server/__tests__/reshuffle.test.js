@@ -141,4 +141,186 @@ describe('request_reshuffle turn enforcement', () => {
         const errorEmits = socket.getEmitted().filter((e) => e.event === 'error');
         expect(errorEmits).toEqual([]);
     });
+
+    test('allows reshuffle with an Ace when player has no J, Q, or K', () => {
+        const io = createMockIo();
+
+        const hostSocketId = 's-host';
+        const { roomCode } = createRoom('Host', hostSocketId);
+        const room = getRoom(roomCode);
+
+        const p2SocketId = 's-p2';
+        joinRoom(roomCode, 'P2', p2SocketId, null);
+        joinRoom(roomCode, 'P3', 's-p3', null);
+        joinRoom(roomCode, 'P4', 's-p4', null);
+
+        room.phase = 'open_window';
+        room.currentTurn = 1;
+        room.currentBatterIndex = 0;
+        room.currentPlayerIndex = 1;
+        room.activeSuit = null;
+        room.trickCards = room.players.map((p) => ({ playerId: p.id, card: null, hidden: false }));
+
+        const p2 = room.players.find((p) => p.name === 'P2');
+        p2.hand = [
+            { suit: 'H', value: 14, id: 'H-14' },
+            { suit: 'D', value: 3, id: 'D-3' },
+            { suit: 'S', value: 10, id: 'S-10' },
+        ];
+
+        const socket = createMockSocket(p2SocketId);
+        registerSocketHandlers(io, socket);
+
+        socket.getHandler('request_reshuffle')({ roomCode });
+
+        const errorEmits = socket.getEmitted().filter((e) => e.event === 'error');
+        expect(errorEmits).toEqual([]);
+    });
+
+    test('allows reshuffle with three Aces during the first trick after the batter has led', () => {
+        const io = createMockIo();
+
+        const hostSocketId = 's-host';
+        const { roomCode } = createRoom('Host', hostSocketId);
+        const room = getRoom(roomCode);
+
+        joinRoom(roomCode, 'P2', 's-p2', null);
+        joinRoom(roomCode, 'P3', 's-p3', null);
+        const p4SocketId = 's-p4';
+        joinRoom(roomCode, 'P4', p4SocketId, null);
+
+        room.phase = 'open_window';
+        room.currentTurn = 1;
+        room.currentBatterIndex = 0;
+        room.currentPlayerIndex = 3;
+        room.activeSuit = 'S';
+        room.trumpRevealed = false;
+        room.trickCards = room.players.map((p) => ({ playerId: p.id, card: null, hidden: false }));
+        room.trickCards[0].card = { suit: 'S', value: 9, id: 'S-9' };
+
+        const p4 = room.players.find((p) => p.name === 'P4');
+        p4.hand = [
+            { suit: 'H', value: 14, id: 'H-14' },
+            { suit: 'D', value: 14, id: 'D-14' },
+            { suit: 'C', value: 14, id: 'C-14' },
+        ];
+
+        const socket = createMockSocket(p4SocketId);
+        registerSocketHandlers(io, socket);
+
+        socket.getHandler('request_reshuffle')({ roomCode });
+
+        const errorEmits = socket.getEmitted().filter((e) => e.event === 'error');
+        expect(errorEmits).toEqual([]);
+    });
+
+    test('allows reshuffle on current turn even if trump was revealed during the first trick', () => {
+        const io = createMockIo();
+
+        const hostSocketId = 's-host';
+        const { roomCode } = createRoom('Host', hostSocketId);
+        const room = getRoom(roomCode);
+
+        joinRoom(roomCode, 'P2', 's-p2', null);
+        const p3SocketId = 's-p3';
+        joinRoom(roomCode, 'P3', p3SocketId, null);
+        joinRoom(roomCode, 'P4', 's-p4', null);
+
+        room.phase = 'open_window';
+        room.currentTurn = 1;
+        room.currentBatterIndex = 0;
+        room.currentPlayerIndex = 2;
+        room.activeSuit = 'S';
+        room.trumpRevealed = true;
+        room.trumpSuit = 'H';
+        room.trickCards = room.players.map((p) => ({ playerId: p.id, card: null, hidden: false }));
+        room.trickCards[0].card = { suit: 'S', value: 9, id: 'S-9' };
+        room.trickCards[1].card = { suit: 'S', value: 10, id: 'S-10' };
+
+        const p3 = room.players.find((p) => p.name === 'P3');
+        p3.hand = [
+            { suit: 'H', value: 14, id: 'H-14' },
+            { suit: 'D', value: 14, id: 'D-14' },
+            { suit: 'C', value: 14, id: 'C-14' },
+        ];
+
+        const socket = createMockSocket(p3SocketId);
+        registerSocketHandlers(io, socket);
+
+        socket.getHandler('request_reshuffle')({ roomCode });
+
+        const errorEmits = socket.getEmitted().filter((e) => e.event === 'error');
+        expect(errorEmits).toEqual([]);
+    });
+
+    test('rejects reshuffle if player has J, Q, or K', () => {
+        const io = createMockIo();
+
+        const hostSocketId = 's-host';
+        const { roomCode } = createRoom('Host', hostSocketId);
+        const room = getRoom(roomCode);
+
+        const p2SocketId = 's-p2';
+        joinRoom(roomCode, 'P2', p2SocketId, null);
+        joinRoom(roomCode, 'P3', 's-p3', null);
+        joinRoom(roomCode, 'P4', 's-p4', null);
+
+        room.phase = 'open_window';
+        room.currentTurn = 1;
+        room.currentBatterIndex = 0;
+        room.currentPlayerIndex = 1;
+        room.activeSuit = null;
+        room.trickCards = room.players.map((p) => ({ playerId: p.id, card: null, hidden: false }));
+
+        const p2 = room.players.find((p) => p.name === 'P2');
+        p2.hand = [
+            { suit: 'H', value: 11, id: 'H-11' },
+            { suit: 'D', value: 3, id: 'D-3' },
+            { suit: 'S', value: 10, id: 'S-10' },
+        ];
+
+        const socket = createMockSocket(p2SocketId);
+        registerSocketHandlers(io, socket);
+
+        socket.getHandler('request_reshuffle')({ roomCode });
+
+        const errorEmits = socket.getEmitted().filter((e) => e.event === 'error');
+        expect(errorEmits).toHaveLength(1);
+        expect(errorEmits[0].payload.code).toBe('RESHUFFLE_NOT_ELIGIBLE');
+    });
+
+    test('rejects reshuffle from the hidden trump holder even with no J, Q, or K', () => {
+        const io = createMockIo();
+
+        const hostSocketId = 's-host';
+        const { roomCode } = createRoom('Host', hostSocketId);
+        const room = getRoom(roomCode);
+
+        joinRoom(roomCode, 'P2', 's-p2', null);
+        joinRoom(roomCode, 'P3', 's-p3', null);
+        joinRoom(roomCode, 'P4', 's-p4', null);
+
+        room.phase = 'open_window';
+        room.currentTurn = 1;
+        room.currentBatterIndex = 0;
+        room.currentPlayerIndex = 0;
+        room.activeSuit = null;
+        room.trickCards = room.players.map((p) => ({ playerId: p.id, card: null, hidden: false }));
+
+        const host = room.players.find((p) => p.name === 'Host');
+        host.hand = [
+            { suit: 'H', value: 14, id: 'H-14' },
+            { suit: 'D', value: 3, id: 'D-3' },
+            { suit: 'S', value: 10, id: 'S-10' },
+        ];
+
+        const socket = createMockSocket(hostSocketId);
+        registerSocketHandlers(io, socket);
+
+        socket.getHandler('request_reshuffle')({ roomCode });
+
+        const errorEmits = socket.getEmitted().filter((e) => e.event === 'error');
+        expect(errorEmits).toHaveLength(1);
+        expect(errorEmits[0].payload.code).toBe('RESHUFFLE_NOT_ELIGIBLE');
+    });
 });

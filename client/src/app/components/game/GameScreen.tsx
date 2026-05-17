@@ -99,6 +99,7 @@ export function GameScreen() {
     isMyTurn &&
     !openMode &&
     !doubleOpenMode &&
+    !trumpRevealed &&
     myPlayerIndex !== currentBatterIndex;
 
   const canDeclareDoubleOpenClient =
@@ -112,6 +113,7 @@ export function GameScreen() {
   const hasFaceCardsClient = myHand.some((c) => c.value === 11 || c.value === 12 || c.value === 13);
 
   const showReshuffleButtonClient =
+    serverPhase === "open_window" &&
     currentTurn === 1 &&
     !openMode &&
     !doubleOpenMode;
