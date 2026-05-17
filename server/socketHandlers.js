@@ -63,6 +63,44 @@ function logInvalidPlay(room, player, cardId, errorCode) {
     console.warn(`Invalid play diagnostic ${JSON.stringify(payload)}`);
 }
 
+function playerDebugPayload(player) {
+    if (!player) return null;
+    return {
+        id: player.id,
+        name: player.name,
+        playerIndex: player.playerIndex,
+        teamIndex: player.teamIndex,
+        connected: player.connected,
+    };
+}
+
+function roomDebugPayload(room) {
+    if (!room) return null;
+    return {
+        roomCode: room.roomCode,
+        phase: room.phase,
+        currentRound: room.currentRound,
+        currentTurn: room.currentTurn,
+        currentBatterIndex: room.currentBatterIndex,
+        currentPlayerIndex: room.currentPlayerIndex,
+        batterRoundsPlayed: room.batterRoundsPlayed,
+        openCountForBatter: room.openCountForBatter,
+        connectedCount: room.players.filter((p) => p.connected).length,
+        playerCount: room.players.length,
+    };
+}
+
+function logSocketRoomEvent(event, socket, room, player, extra = {}) {
+    console.log(`Socket lifecycle ${JSON.stringify({
+        event,
+        socketId: socket.id,
+        transport: socket.conn?.transport?.name || null,
+        room: roomDebugPayload(room),
+        player: playerDebugPayload(player),
+        ...extra,
+    })}`);
+}
+
 function roomPlayersPublic(room) {
     return room.players.map((p) => ({
         id: p.id,
@@ -235,8 +273,7 @@ function dealForRound(room) {
 function isReshuffleWindowOpen(room) {
     if (room.phase !== 'open_window') return false;
     if (room.currentTurn !== 1) return false;
-    if (room.activeSuit !== null) return false;
-    return room.trickCards.every((t) => t.card === null);
+    return true;
 }
 
 function canReshufflePlayer(player, room) {
@@ -250,6 +287,8 @@ function canReshufflePlayer(player, room) {
     }
     if (!isReshuffleWindowOpen(room)) return { ok: false, code: 'RESHUFFLE_NOT_ELIGIBLE' };
     if (room.openMode || room.doubleOpenMode) return { ok: false, code: 'RESHUFFLE_NOT_ELIGIBLE' };
+    const slot = room.trickCards.find((t) => t.playerId === player.id);
+    if (slot && slot.card) return { ok: false, code: 'RESHUFFLE_NOT_ELIGIBLE' };
     return { ok: true };
 }
 
@@ -320,6 +359,16 @@ function maybeAdvanceToNextRound(io, room) {
 }
 
 function registerSocketHandlers(io, socket) {
+    socket.on('disconnecting', (reason) => {
+        const trackedRoomCode = socket.data.roomCode;
+        const room = trackedRoomCode ? getRoom(trackedRoomCode) : null;
+        const player = room ? findPlayerBySocket(room, socket.id) : null;
+        logSocketRoomEvent('disconnecting', socket, room, player, {
+            reason,
+            socketRooms: Array.from(socket.rooms).filter((r) => r !== socket.id),
+        });
+    });
+
     socket.on('create_room', ({ playerName }) => {
         if (!playerName || typeof playerName !== 'string') {
             emitError(socket, 'INVALID_ACTION', 'playerName is required');
@@ -332,6 +381,7 @@ function registerSocketHandlers(io, socket) {
 
         const room = getRoom(roomCode);
         const payload = roomUpdatePayload(room);
+        logSocketRoomEvent('create_room', socket, room, player);
         socket.emit('room_update', payload);
         io.to(room.roomCode).except(socket.id).emit('room_update', payload);
         initTrickCards(room);
@@ -357,6 +407,7 @@ function registerSocketHandlers(io, socket) {
         const { room, player, reconnected } = joined;
         socket.join(room.roomCode);
         socket.data.roomCode = room.roomCode;
+        logSocketRoomEvent('join_room', socket, room, player, { reconnected: !!reconnected });
 
         socket.emit('joined_room', { roomCode: room.roomCode, playerId: player.id, reconnected: !!reconnected });
         const payload = roomUpdatePayload(room);
@@ -594,12 +645,13 @@ function registerSocketHandlers(io, socket) {
             && card.suit !== room.activeSuit;
         slot.hidden = hideUntilTrumpRevealed;
         classifyPlayedCard(room, slot);
+        const playedCardsInTrick = room.trickCards.filter((t) => t.card).length;
 
         // Advance to next seat within the trick
         room.currentPlayerIndex = (room.currentPlayerIndex + 3) % 4;
 
         const nextPlayer = room.players[room.currentPlayerIndex];
-        if (!room.trumpRevealed && room.activeSuit && nextPlayer) {
+        if (playedCardsInTrick < 4 && !room.trumpRevealed && room.activeSuit && nextPlayer) {
             const bowlingTeam = getBowlingTeamIndex(room);
             const hasActiveSuit = nextPlayer.hand.some((c) => c.suit === room.activeSuit);
             if (nextPlayer.teamIndex === bowlingTeam && !hasActiveSuit) {
@@ -690,11 +742,12 @@ function registerSocketHandlers(io, socket) {
         }
     });
 
-    socket.on('disconnect', () => {
+    socket.on('disconnect', (reason) => {
         const trackedRoomCode = socket.data.roomCode;
         const room = trackedRoomCode ? getRoom(trackedRoomCode) : null;
         if (room) {
             const player = findPlayerBySocket(room, socket.id);
+            logSocketRoomEvent('disconnect', socket, room, player, { reason, trackedRoomCode });
             if (player) {
                 player.connected = false;
                 io.to(room.roomCode).emit('player_disconnected', { playerId: player.id });
@@ -719,6 +772,7 @@ function registerSocketHandlers(io, socket) {
             if (!r) continue;
             const player = findPlayerBySocket(r, socket.id);
             if (!player) continue;
+            logSocketRoomEvent('disconnect_fallback', socket, r, player, { reason, roomCode });
             player.connected = false;
             io.to(r.roomCode).emit('player_disconnected', { playerId: player.id });
             emitRoomUpdate(io, r);

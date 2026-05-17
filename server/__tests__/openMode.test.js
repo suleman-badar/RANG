@@ -1,4 +1,5 @@
 import { canDeclareOpen, executeOpen, canDeclareDoubleOpen, executeDoubleOpen } from '../gameLogic/openMode.js';
+import { revealTrump, shouldRevealTrump } from '../gameLogic/trumpEngine.js';
 
 function makeRoom() {
     return {
@@ -46,6 +47,37 @@ describe('openMode', () => {
         room.currentTurn = 2;
         const res = canDeclareOpen(room, 'p1');
         expect(res.valid).toBe(false);
+    });
+
+    test('declare_open rejected if hidden trump was already revealed', () => {
+        const room = makeRoom();
+        room.trumpRevealed = true;
+        room.trumpSuit = 'H';
+
+        const res = canDeclareOpen(room, 'p1');
+
+        expect(res.valid).toBe(false);
+        expect(res.errorCode).toBe('INVALID_ACTION');
+    });
+
+    test('declare_open rejected when trump is revealed during the first trick', () => {
+        const room = makeRoom();
+        room.currentPlayerIndex = 0;
+        room.players[3].hand = [{ suit: 'D', value: 4, id: 'D-4' }];
+
+        room.activeSuit = 'S';
+        room.trickCards[0].card = { suit: 'S', value: 9, id: 'S-9' };
+        room.currentPlayerIndex = 3;
+
+        expect(shouldRevealTrump(room, 'p3')).toBe(true);
+        expect(revealTrump(room)).toEqual({ suit: 'H', value: 7, id: 'H-7' });
+
+        const res = canDeclareOpen(room, 'p3');
+
+        expect(room.currentTurn).toBe(1);
+        expect(room.trumpRevealed).toBe(true);
+        expect(res.valid).toBe(false);
+        expect(res.errorCode).toBe('INVALID_ACTION');
     });
 
     test('declare_open rejected if openCountForBatter >= 3', () => {
@@ -122,6 +154,9 @@ describe('openMode', () => {
         expect(room.openDeclaredByPlayerId).toBe('p1');
 
         room.currentPlayerIndex = 2;
+        const canDoubleOpen = canDeclareDoubleOpen(room, 'p2');
+        expect(canDoubleOpen.valid).toBe(true);
+
         const doubleOpenResult = executeDoubleOpen(room, 'p2', 'H');
         expect(doubleOpenResult.ok).toBe(true);
         expect(room.openCountForBatter).toBe(1);

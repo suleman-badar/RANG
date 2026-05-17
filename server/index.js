@@ -5,9 +5,12 @@ import { Server } from 'socket.io';
 import cors from 'cors';
 
 import { registerSocketHandlers } from './socketHandlers.js';
+import { getRoomsDebugSnapshot } from './rooms.js';
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3001;
+const HEALTH_LOG_INTERVAL_MS = Number(process.env.SERVER_HEALTH_LOG_INTERVAL_MS || 60_000);
 const startedAt = new Date();
+let healthLogTimer = null;
 
 function logLifecycle(event, extra = {}) {
     const payload = {
@@ -18,6 +21,26 @@ function logLifecycle(event, extra = {}) {
         ...extra,
     };
     console.log(`Server lifecycle ${JSON.stringify(payload)}`);
+}
+
+function buildServerHealth(io) {
+    const memory = process.memoryUsage();
+    return {
+        sockets: io?.engine?.clientsCount || 0,
+        rooms: getRoomsDebugSnapshot(),
+        memory: {
+            rssMb: Math.round(memory.rss / 1024 / 1024),
+            heapUsedMb: Math.round(memory.heapUsed / 1024 / 1024),
+            heapTotalMb: Math.round(memory.heapTotal / 1024 / 1024),
+        },
+    };
+}
+
+function clearHealthLogging() {
+    if (healthLogTimer) {
+        clearInterval(healthLogTimer);
+        healthLogTimer = null;
+    }
 }
 
 process.on('uncaughtException', (err) => {
@@ -38,6 +61,7 @@ process.on('unhandledRejection', (reason) => {
 
 process.on('SIGTERM', () => {
     logLifecycle('SIGTERM');
+    clearHealthLogging();
     httpServer.close(() => {
         logLifecycle('httpServerClosed');
         process.exit(0);
@@ -46,10 +70,15 @@ process.on('SIGTERM', () => {
 
 process.on('SIGINT', () => {
     logLifecycle('SIGINT');
+    clearHealthLogging();
     httpServer.close(() => {
         logLifecycle('httpServerClosed');
         process.exit(0);
     });
+});
+
+process.on('exit', (code) => {
+    logLifecycle('exit', { code });
 });
 
 const app = express();
@@ -65,15 +94,36 @@ app.use(cors({
     credentials: true,
 }));
 
+app.get('/healthz', (_req, res) => {
+    res.json({
+        ok: true,
+        pid: process.pid,
+        uptimeSeconds: Math.round(process.uptime()),
+        startedAt: startedAt.toISOString(),
+        ...buildServerHealth(io),
+    });
+});
+
 const io = new Server(httpServer, {
     cors: {
         origin: CLIENT_URL,
         methods: ['GET', 'POST'],
         credentials: true,
     },
+    maxHttpBufferSize: 1e7, // 10 MB
+    pingTimeout: 60000
+
 });
 
 io.on('connection', (socket) => {
+    console.log(`Socket lifecycle ${JSON.stringify({
+        event: 'connection',
+        socketId: socket.id,
+        transport: socket.conn?.transport?.name || null,
+        address: socket.handshake?.address || null,
+        userAgent: socket.handshake?.headers?.['user-agent'] || null,
+        sockets: io.engine?.clientsCount || 0,
+    })}`);
     registerSocketHandlers(io, socket);
 });
 
@@ -82,4 +132,11 @@ httpServer.listen(PORT, () => {
     const actualPort = address && typeof address === 'object' ? address.port : PORT;
     console.log(`Rang Advance server listening on ${actualPort}`);
     logLifecycle('listening', { port: actualPort });
+
+    if (HEALTH_LOG_INTERVAL_MS > 0) {
+        healthLogTimer = setInterval(() => {
+            logLifecycle('health', buildServerHealth(io));
+        }, HEALTH_LOG_INTERVAL_MS);
+        healthLogTimer.unref?.();
+    }
 });
