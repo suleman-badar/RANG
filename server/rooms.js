@@ -96,6 +96,23 @@ function getRoom(roomCode) {
     return rooms[roomCode] || null;
 }
 
+function getRoomsDebugSnapshot() {
+    return Object.values(rooms).map((room) => ({
+        roomCode: room.roomCode,
+        phase: room.phase,
+        playerCount: room.players.length,
+        connectedCount: room.players.filter((p) => p.connected).length,
+        currentRound: room.currentRound,
+        currentTurn: room.currentTurn,
+        currentBatterIndex: room.currentBatterIndex,
+        currentPlayerIndex: room.currentPlayerIndex,
+        batterRoundsPlayed: room.batterRoundsPlayed,
+        openCountForBatter: room.openCountForBatter,
+        scores: room.totalScores,
+        createdAt: room.roomCreatedAt instanceof Date ? room.roomCreatedAt.toISOString() : room.roomCreatedAt,
+    }));
+}
+
 function deleteRoom(roomCode) {
     // console.log(`Deleting room ${roomCode}`);
     if (cleanupTimers[roomCode]) {
@@ -214,6 +231,7 @@ export {
     createRoom,
     joinRoom,
     getRoom,
+    getRoomsDebugSnapshot,
     deleteRoom,
     findPlayerBySocket,
     findPlayerById,
