@@ -143,6 +143,7 @@ export interface GameState {
   activeSuit: string | null;
   trumpSuit: string | null;
   trumpRevealed: boolean;
+  revealedTrumpCard: Card | null;
   currentTurn: number;
   currentRound: number;
   currentBatterIndex: number;
@@ -220,6 +221,7 @@ const INITIAL_STATE: GameState = {
   activeSuit: null,
   trumpSuit: null,
   trumpRevealed: false,
+  revealedTrumpCard: null,
   currentTurn: 1,
   currentRound: 1,
   currentBatterIndex: 0,
@@ -321,6 +323,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const pendingTrickStateRef = useRef<Partial<GameState> | null>(null);
   const hiddenPileHoldTimerRef = useRef<number | null>(null);
   const hiddenPileClearPendingRef = useRef(false);
+  const revealedTrumpCardTimerRef = useRef<number | null>(null);
 
   const clearTrickHold = useCallback(() => {
     if (trickClearTimerRef.current !== null) {
@@ -359,6 +362,13 @@ export function GameProvider({ children }: { children: ReactNode }) {
         setState((prev) => ({ ...prev, hiddenPile: [] }));
       }
     }, 10000);
+  }, []);
+
+  const clearRevealedTrumpCardTimer = useCallback(() => {
+    if (revealedTrumpCardTimerRef.current !== null) {
+      window.clearTimeout(revealedTrumpCardTimerRef.current);
+      revealedTrumpCardTimerRef.current = null;
+    }
   }, []);
 
   const update = useCallback((patch: Partial<GameState>) => {
@@ -559,6 +569,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       if (stateRef.current.hiddenPile.length > 0) {
         startHiddenPileHold();
       }
+      const revealedCard = data?.hiddenCard && data.hiddenCard.id ? data.hiddenCard as Card : null;
       const patch: Partial<GameState> = {
         trumpRevealed: true,
         trumpSuit: data?.trumpSuit ?? null,
@@ -566,6 +577,18 @@ export function GameProvider({ children }: { children: ReactNode }) {
         isHiddenBatter: false,
         hiddenPile: stateRef.current.hiddenPile,
       };
+      clearRevealedTrumpCardTimer();
+      if (revealedCard) {
+        patch.revealedTrumpCard = revealedCard;
+        revealedTrumpCardTimerRef.current = window.setTimeout(() => {
+          revealedTrumpCardTimerRef.current = null;
+          setState((prev) =>
+            prev.revealedTrumpCard?.id === revealedCard.id
+              ? { ...prev, revealedTrumpCard: null }
+              : prev
+          );
+        }, 5000);
+      }
       if (Array.isArray(data?.batterNewHand)) {
         patch.myHand = sortHand(data.batterNewHand);
       }
@@ -577,12 +600,14 @@ export function GameProvider({ children }: { children: ReactNode }) {
     socket.on("deal_hand", (data: any) => {
       const hand: Card[] = data.hand || data.cards || [];
       const keepHiddenPileVisible = hiddenPileHoldTimerRef.current !== null;
+      clearRevealedTrumpCardTimer();
       const patch: Partial<GameState> = {
         myHand: sortHand(hand),
         screen: "game",
         // Server tells this player whether they are the hidden batter
         isHiddenBatter: Boolean(data.isHiddenBatter),
         hiddenPile: keepHiddenPileVisible ? stateRef.current.hiddenPile : [],
+        revealedTrumpCard: null,
       };
       if (keepHiddenPileVisible) hiddenPileClearPendingRef.current = true;
       // Merge any extra game state that came with deal_hand
@@ -666,6 +691,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     socket.on("game_over", (data: any) => {
       clearTrickHold();
       clearHiddenPileHold();
+      clearRevealedTrumpCardTimer();
       const patch = mergeServerState(stateRef.current, data);
       patch.screen = "game_over";
       patch.serverPhase = "game_over";
@@ -720,10 +746,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
     return () => {
       clearTrickHold();
       clearHiddenPileHold();
+      clearRevealedTrumpCardTimer();
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [clearHiddenPileHold, clearTrickHold, startHiddenPileHold]);
+  }, [clearHiddenPileHold, clearRevealedTrumpCardTimer, clearTrickHold, startHiddenPileHold]);
 
   // ── Actions ──────────────────────────────────────────────────────────────
 
@@ -788,9 +815,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const leaveRoom = useCallback(() => {
     clearTrickHold();
     clearHiddenPileHold();
+    clearRevealedTrumpCardTimer();
     clearSession();
     update({ ...INITIAL_STATE, socketConnected: stateRef.current.socketConnected });
-  }, [clearHiddenPileHold, clearTrickHold, update]);
+  }, [clearHiddenPileHold, clearRevealedTrumpCardTimer, clearTrickHold, update]);
 
   const clearError = useCallback(() => update({ lastError: null, lastErrorCode: null }), [update]);
   const dismissTrickWinner = useCallback(() => update({ lastTrickWinner: null }), [update]);
