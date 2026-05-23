@@ -1,4 +1,4 @@
-import { validatePlay, resolveTrick, checkConsecutiveWins } from '../gameLogic/turnEngine.js';
+import { validatePlay, resolveTrick, checkConsecutiveWins, getTargetConsecutiveTeam } from '../gameLogic/turnEngine.js';
 
 function makeRoom() {
     return {
@@ -10,6 +10,7 @@ function makeRoom() {
         openMode: false,
         doubleOpenMode: false,
         openDeclaredByTeam: null,
+        doubleOpenDeclaredByTeam: null,
         trickCards: [
             { playerId: 'p0', card: null, hidden: false },
             { playerId: 'p1', card: null, hidden: false },
@@ -202,6 +203,34 @@ describe('turnEngine', () => {
         const third = checkConsecutiveWins(room, 'p1', { suit: 'H', value: 13, id: 'H-13' });
         expect(third.roundOver).toBe(true);
         expect(third.winnerTeam).toBe(1);
+    });
+
+    test('Double-open uses the double-open declarer as the defending team', () => {
+        const room = makeRoom();
+        room.openMode = true;
+        room.doubleOpenMode = true;
+        room.openDeclaredByTeam = 1;
+        room.doubleOpenDeclaredByTeam = 0;
+
+        expect(getTargetConsecutiveTeam(room)).toBe(1);
+
+        room.currentTurn = 2;
+        room.lastTrickWinnerPlayerId = 'p2';
+        room.consecutiveBowlingWins = 1;
+        const doubleOpenDeclarerWin = checkConsecutiveWins(room, 'p2', { suit: 'D', value: 13, id: 'D-13' });
+
+        expect(doubleOpenDeclarerWin.roundOver).toBe(false);
+        expect(room.consecutiveBowlingWins).toBe(0);
+
+        const firstOpponentWin = checkConsecutiveWins(room, 'p1', { suit: 'C', value: 12, id: 'C-12' });
+        expect(firstOpponentWin.roundOver).toBe(false);
+        expect(room.consecutiveBowlingWins).toBe(1);
+
+        room.currentTurn = 3;
+        const secondOpponentWin = checkConsecutiveWins(room, 'p1', { suit: 'H', value: 13, id: 'H-13' });
+
+        expect(secondOpponentWin.roundOver).toBe(true);
+        expect(secondOpponentWin.winnerTeam).toBe(1);
     });
 
     test('Normal hidden mode does not end on two plain Ace wins by the same bowler', () => {

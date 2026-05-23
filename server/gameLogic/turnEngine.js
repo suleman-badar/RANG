@@ -1,4 +1,5 @@
 import { getBatterTeamIndex, getBowlingTeamIndex } from '../rooms.js';
+import { getOpenStoppingTeam } from './openContract.js';
 
 function isTrumpCard(card, trumpSuit) {
     if (!trumpSuit) return false;
@@ -87,8 +88,7 @@ function resolveTrick(room) {
 
 function getTargetConsecutiveTeam(room) {
     if (room.openMode || room.doubleOpenMode) {
-        if (room.openDeclaredByTeam === null) return null;
-        return 1 - room.openDeclaredByTeam;
+        return getOpenStoppingTeam(room);
     }
     return getBowlingTeamIndex(room);
 }

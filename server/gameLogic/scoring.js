@@ -1,3 +1,5 @@
+import { getOpenContractTeam } from './openContract.js';
+
 function calculatePoints(room, winnerTeam) {
     const team0 = 0;
     const team1 = 1;
@@ -17,7 +19,7 @@ function calculatePoints(room, winnerTeam) {
         return { team0Points, team1Points };
     }
 
-    const declTeam = room.openDeclaredByTeam;
+    const declTeam = getOpenContractTeam(room);
     const oppTeam = declTeam === null ? null : 1 - declTeam;
 
     if (room.doubleOpenMode) {
