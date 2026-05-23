@@ -671,11 +671,15 @@ function registerSocketHandlers(io, socket) {
         const winner = room.players.find((p) => p.id === trick.winnerPlayerId);
         const winnerTeam = winner ? winner.teamIndex : 0;
 
-        const consecutiveCheck = room.trumpRevealedThisTrick
-            ? { roundOver: false }
-            : checkConsecutiveWins(room, trick.winnerPlayerId, trick.winningCard, {
+        let consecutiveCheck;
+        if (room.trumpRevealedThisTrick) {
+            resetConsecutiveState(room);
+            consecutiveCheck = { roundOver: false };
+        } else {
+            consecutiveCheck = checkConsecutiveWins(room, trick.winnerPlayerId, trick.winningCard, {
                 winningCardWasTrumpCut: trick.winningCardWasTrumpCut,
             });
+        }
 
         const isExcludedOpenTurn1 = (room.openMode || room.doubleOpenMode) && room.currentTurn === 1;
 
