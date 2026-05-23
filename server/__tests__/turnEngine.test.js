@@ -20,6 +20,7 @@ function makeRoom() {
         consecutiveBowlingWins: 0,
         consecutiveWinBanked: false,
         lastTrickWasAce: false,
+        lastTrickWasTrumpCutAce: false,
         players: [
             { id: 'p0', playerIndex: 0, teamIndex: 0, hand: [] },
             { id: 'p1', playerIndex: 1, teamIndex: 1, hand: [] },
@@ -124,6 +125,46 @@ describe('turnEngine', () => {
         expect(r.winnerPlayerId).toBe('p3');
     });
 
+    test('Trick winner metadata: trump Ace cut is marked when it cuts a different active suit', () => {
+        const room = makeRoom();
+        room.activeSuit = 'S';
+        room.trumpRevealed = true;
+        room.trumpSuit = 'H';
+        room.trickCards[0].card = { suit: 'S', value: 13, id: 'S-13' };
+        room.trickCards[0].playedAfterTrumpReveal = true;
+        room.trickCards[1].card = { suit: 'S', value: 12, id: 'S-12' };
+        room.trickCards[1].playedAfterTrumpReveal = true;
+        room.trickCards[2].card = { suit: 'H', value: 14, id: 'H-14' };
+        room.trickCards[2].playedAfterTrumpReveal = true;
+        room.trickCards[3].card = { suit: 'S', value: 11, id: 'S-11' };
+        room.trickCards[3].playedAfterTrumpReveal = true;
+
+        const r = resolveTrick(room);
+
+        expect(r.winnerPlayerId).toBe('p2');
+        expect(r.winningCardWasTrumpCut).toBe(true);
+    });
+
+    test('Trick winner metadata: trump Ace led as active suit is not marked as a cut', () => {
+        const room = makeRoom();
+        room.activeSuit = 'H';
+        room.trumpRevealed = true;
+        room.trumpSuit = 'H';
+        room.trickCards[0].card = { suit: 'H', value: 14, id: 'H-14' };
+        room.trickCards[0].playedAfterTrumpReveal = true;
+        room.trickCards[1].card = { suit: 'H', value: 13, id: 'H-13' };
+        room.trickCards[1].playedAfterTrumpReveal = true;
+        room.trickCards[2].card = { suit: 'H', value: 12, id: 'H-12' };
+        room.trickCards[2].playedAfterTrumpReveal = true;
+        room.trickCards[3].card = { suit: 'H', value: 11, id: 'H-11' };
+        room.trickCards[3].playedAfterTrumpReveal = true;
+
+        const r = resolveTrick(room);
+
+        expect(r.winnerPlayerId).toBe('p0');
+        expect(r.winningCardWasTrumpCut).toBe(false);
+    });
+
     test('Consecutive win counter increments correctly', () => {
         const room = makeRoom();
         room.lastTrickWinnerPlayerId = 'p1';
@@ -163,14 +204,34 @@ describe('turnEngine', () => {
         expect(third.winnerTeam).toBe(1);
     });
 
-    test('Normal mode still ends after two same-player bowling wins, even with aces', () => {
+    test('Normal hidden mode does not end on two plain Ace wins by the same bowler', () => {
         const room = makeRoom();
         room.trumpRevealed = true;
         room.lastTrickWinnerPlayerId = 'p1';
         room.lastTrickWasAce = true;
+        room.lastTrickWasTrumpCutAce = false;
         room.consecutiveBowlingWins = 1;
 
-        const res = checkConsecutiveWins(room, 'p1', { suit: 'D', value: 14, id: 'D-14' });
+        const res = checkConsecutiveWins(room, 'p1', { suit: 'D', value: 14, id: 'D-14' }, { winningCardWasTrumpCut: false });
+
+        expect(res.roundOver).toBe(false);
+        expect(room.lastTrickWinnerPlayerId).toBe('p1');
+        expect(room.lastTrickWasAce).toBe(true);
+        expect(room.lastTrickWasTrumpCutAce).toBe(false);
+        expect(room.consecutiveBowlingWins).toBe(1);
+    });
+
+    test('Normal hidden mode allows two Ace wins only when the first Ace was a trump cut', () => {
+        const room = makeRoom();
+        room.trumpRevealed = true;
+        room.trumpSuit = 'H';
+        room.lastTrickWinnerPlayerId = 'p1';
+        room.lastTrickWasAce = true;
+        room.lastTrickWasTrumpCutAce = true;
+        room.consecutiveBowlingWins = 1;
+
+        const res = checkConsecutiveWins(room, 'p1', { suit: 'D', value: 14, id: 'D-14' }, { winningCardWasTrumpCut: false });
+
         expect(res.roundOver).toBe(true);
         expect(res.winnerTeam).toBe(1);
     });

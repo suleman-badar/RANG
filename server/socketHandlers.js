@@ -668,7 +668,9 @@ function registerSocketHandlers(io, socket) {
 
         const consecutiveCheck = room.trumpRevealedThisTrick
             ? { roundOver: false }
-            : checkConsecutiveWins(room, trick.winnerPlayerId, trick.winningCard);
+            : checkConsecutiveWins(room, trick.winnerPlayerId, trick.winningCard, {
+                winningCardWasTrumpCut: trick.winningCardWasTrumpCut,
+            });
 
         const isExcludedOpenTurn1 = (room.openMode || room.doubleOpenMode) && room.currentTurn === 1;
 

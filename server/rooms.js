@@ -47,6 +47,7 @@ function buildInitialRoomState(roomCode, hostSocketId) {
         consecutiveBowlingWins: 0,
         consecutiveWinBanked: false,
         lastTrickWasAce: false,
+        lastTrickWasTrumpCutAce: false,
         batterRoundsPlayed: 0,
         openCountForBatter: 0,
 
