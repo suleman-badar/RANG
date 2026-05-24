@@ -65,6 +65,8 @@ function executeOpen(room, playerId, trumpSuit) {
     room.openDeclaredByPlayerId = playerId;
     const decl = room.players.find((p) => p.id === playerId);
     room.openDeclaredByTeam = decl ? decl.teamIndex : null;
+    room.doubleOpenDeclaredByPlayerId = null;
+    room.doubleOpenDeclaredByTeam = null;
 
     if (decl && decl.teamIndex === getBowlingTeamIndex(room)) {
         ++room.openCountForBatter;
@@ -99,7 +101,9 @@ function executeDoubleOpen(room, playerId, trumpSuit) {
     room.trumpSuit = trumpSuit;
     room.trumpRevealed = true;
 
-    // Keep open ownership from the initial Open declaration.
+    const decl = room.players.find((p) => p.id === playerId);
+    room.doubleOpenDeclaredByPlayerId = playerId;
+    room.doubleOpenDeclaredByTeam = decl ? decl.teamIndex : null;
 
     restartRoundFromAlpha(room, playerId);
     return { ok: true, alphaPlayerId: playerId };

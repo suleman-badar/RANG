@@ -25,6 +25,8 @@ function makeRoom() {
         lastTrickWasAce: false,
         openDeclaredByPlayerId: null,
         openDeclaredByTeam: null,
+        doubleOpenDeclaredByPlayerId: null,
+        doubleOpenDeclaredByTeam: null,
         players: [
             { id: 'p0', playerIndex: 0, teamIndex: 0, hand: [] },
             { id: 'p1', playerIndex: 1, teamIndex: 1, hand: [] },
@@ -141,9 +143,11 @@ describe('openMode', () => {
         expect(room.openCountForBatter).toBe(0);
         expect(room.openDeclaredByTeam).toBe(0);
         expect(room.openDeclaredByPlayerId).toBe('p2');
+        expect(room.doubleOpenDeclaredByTeam).toBe(1);
+        expect(room.doubleOpenDeclaredByPlayerId).toBe('p1');
     });
 
-    test('Double-Open does not change open ownership when bowling team declared Open', () => {
+    test('Double-Open records its own contract team when bowling team declared Open', () => {
         const room = makeRoom();
         room.players[0].hand = [{ suit: 'D', value: 2, id: 'D-2' }];
 
@@ -162,5 +166,7 @@ describe('openMode', () => {
         expect(room.openCountForBatter).toBe(1);
         expect(room.openDeclaredByTeam).toBe(1);
         expect(room.openDeclaredByPlayerId).toBe('p1');
+        expect(room.doubleOpenDeclaredByTeam).toBe(0);
+        expect(room.doubleOpenDeclaredByPlayerId).toBe('p2');
     });
 });

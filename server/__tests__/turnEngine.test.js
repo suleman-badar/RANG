@@ -1,4 +1,4 @@
-import { validatePlay, resolveTrick, checkConsecutiveWins } from '../gameLogic/turnEngine.js';
+import { validatePlay, resolveTrick, checkConsecutiveWins, getTargetConsecutiveTeam, resetConsecutiveState } from '../gameLogic/turnEngine.js';
 
 function makeRoom() {
     return {
@@ -10,6 +10,7 @@ function makeRoom() {
         openMode: false,
         doubleOpenMode: false,
         openDeclaredByTeam: null,
+        doubleOpenDeclaredByTeam: null,
         trickCards: [
             { playerId: 'p0', card: null, hidden: false },
             { playerId: 'p1', card: null, hidden: false },
@@ -20,6 +21,7 @@ function makeRoom() {
         consecutiveBowlingWins: 0,
         consecutiveWinBanked: false,
         lastTrickWasAce: false,
+        lastTrickWasTrumpCutAce: false,
         players: [
             { id: 'p0', playerIndex: 0, teamIndex: 0, hand: [] },
             { id: 'p1', playerIndex: 1, teamIndex: 1, hand: [] },
@@ -124,6 +126,46 @@ describe('turnEngine', () => {
         expect(r.winnerPlayerId).toBe('p3');
     });
 
+    test('Trick winner metadata: trump Ace cut is marked when it cuts a different active suit', () => {
+        const room = makeRoom();
+        room.activeSuit = 'S';
+        room.trumpRevealed = true;
+        room.trumpSuit = 'H';
+        room.trickCards[0].card = { suit: 'S', value: 13, id: 'S-13' };
+        room.trickCards[0].playedAfterTrumpReveal = true;
+        room.trickCards[1].card = { suit: 'S', value: 12, id: 'S-12' };
+        room.trickCards[1].playedAfterTrumpReveal = true;
+        room.trickCards[2].card = { suit: 'H', value: 14, id: 'H-14' };
+        room.trickCards[2].playedAfterTrumpReveal = true;
+        room.trickCards[3].card = { suit: 'S', value: 11, id: 'S-11' };
+        room.trickCards[3].playedAfterTrumpReveal = true;
+
+        const r = resolveTrick(room);
+
+        expect(r.winnerPlayerId).toBe('p2');
+        expect(r.winningCardWasTrumpCut).toBe(true);
+    });
+
+    test('Trick winner metadata: trump Ace led as active suit is not marked as a cut', () => {
+        const room = makeRoom();
+        room.activeSuit = 'H';
+        room.trumpRevealed = true;
+        room.trumpSuit = 'H';
+        room.trickCards[0].card = { suit: 'H', value: 14, id: 'H-14' };
+        room.trickCards[0].playedAfterTrumpReveal = true;
+        room.trickCards[1].card = { suit: 'H', value: 13, id: 'H-13' };
+        room.trickCards[1].playedAfterTrumpReveal = true;
+        room.trickCards[2].card = { suit: 'H', value: 12, id: 'H-12' };
+        room.trickCards[2].playedAfterTrumpReveal = true;
+        room.trickCards[3].card = { suit: 'H', value: 11, id: 'H-11' };
+        room.trickCards[3].playedAfterTrumpReveal = true;
+
+        const r = resolveTrick(room);
+
+        expect(r.winnerPlayerId).toBe('p0');
+        expect(r.winningCardWasTrumpCut).toBe(false);
+    });
+
     test('Consecutive win counter increments correctly', () => {
         const room = makeRoom();
         room.lastTrickWinnerPlayerId = 'p1';
@@ -163,14 +205,62 @@ describe('turnEngine', () => {
         expect(third.winnerTeam).toBe(1);
     });
 
-    test('Normal mode still ends after two same-player bowling wins, even with aces', () => {
+    test('Double-open uses the double-open declarer as the defending team', () => {
+        const room = makeRoom();
+        room.openMode = true;
+        room.doubleOpenMode = true;
+        room.openDeclaredByTeam = 1;
+        room.doubleOpenDeclaredByTeam = 0;
+
+        expect(getTargetConsecutiveTeam(room)).toBe(1);
+
+        room.currentTurn = 2;
+        room.lastTrickWinnerPlayerId = 'p2';
+        room.consecutiveBowlingWins = 1;
+        const doubleOpenDeclarerWin = checkConsecutiveWins(room, 'p2', { suit: 'D', value: 13, id: 'D-13' });
+
+        expect(doubleOpenDeclarerWin.roundOver).toBe(false);
+        expect(room.consecutiveBowlingWins).toBe(0);
+
+        const firstOpponentWin = checkConsecutiveWins(room, 'p1', { suit: 'C', value: 12, id: 'C-12' });
+        expect(firstOpponentWin.roundOver).toBe(false);
+        expect(room.consecutiveBowlingWins).toBe(1);
+
+        room.currentTurn = 3;
+        const secondOpponentWin = checkConsecutiveWins(room, 'p1', { suit: 'H', value: 13, id: 'H-13' });
+
+        expect(secondOpponentWin.roundOver).toBe(true);
+        expect(secondOpponentWin.winnerTeam).toBe(1);
+    });
+
+    test('Normal hidden mode does not end on two plain Ace wins by the same bowler', () => {
         const room = makeRoom();
         room.trumpRevealed = true;
         room.lastTrickWinnerPlayerId = 'p1';
         room.lastTrickWasAce = true;
+        room.lastTrickWasTrumpCutAce = false;
         room.consecutiveBowlingWins = 1;
 
-        const res = checkConsecutiveWins(room, 'p1', { suit: 'D', value: 14, id: 'D-14' });
+        const res = checkConsecutiveWins(room, 'p1', { suit: 'D', value: 14, id: 'D-14' }, { winningCardWasTrumpCut: false });
+
+        expect(res.roundOver).toBe(false);
+        expect(room.lastTrickWinnerPlayerId).toBe('p1');
+        expect(room.lastTrickWasAce).toBe(true);
+        expect(room.lastTrickWasTrumpCutAce).toBe(false);
+        expect(room.consecutiveBowlingWins).toBe(1);
+    });
+
+    test('Normal hidden mode allows two Ace wins only when the first Ace was a trump cut', () => {
+        const room = makeRoom();
+        room.trumpRevealed = true;
+        room.trumpSuit = 'H';
+        room.lastTrickWinnerPlayerId = 'p1';
+        room.lastTrickWasAce = true;
+        room.lastTrickWasTrumpCutAce = true;
+        room.consecutiveBowlingWins = 1;
+
+        const res = checkConsecutiveWins(room, 'p1', { suit: 'D', value: 14, id: 'D-14' }, { winningCardWasTrumpCut: false });
+
         expect(res.roundOver).toBe(true);
         expect(res.winnerTeam).toBe(1);
     });
@@ -214,7 +304,7 @@ describe('turnEngine', () => {
         expect(room.consecutiveBowlingWins).toBe(1);
     });
 
-    test('First post-reveal bowling win ends only when same player won the immediately previous counted trick before reveal', () => {
+    test('First post-reveal bowling win does not combine with a pre-reveal same-player streak', () => {
         const room = makeRoom();
         room.lastTrickWinnerPlayerId = 'p1';
         room.consecutiveBowlingWins = 1;
@@ -224,14 +314,14 @@ describe('turnEngine', () => {
         expect(hiddenSecond.roundOver).toBe(false);
         expect(room.consecutiveBowlingWins).toBe(1);
 
+        resetConsecutiveState(room);
         room.trumpRevealed = true;
         room.trumpSuit = 'S';
         const postReveal = checkConsecutiveWins(room, 'p1', { suit: 'C', value: 12, id: 'C-12' });
 
-        expect(postReveal.roundOver).toBe(true);
-        expect(postReveal.winnerTeam).toBe(1);
-        expect(postReveal.reason).toBe('two_consecutive_non_ace_same_player_wins');
-        expect(room.consecutiveBowlingWins).toBe(2);
+        expect(postReveal.roundOver).toBe(false);
+        expect(room.lastTrickWinnerPlayerId).toBe('p1');
+        expect(room.consecutiveBowlingWins).toBe(1);
     });
 
     test('Older same-player win before reveal does not count if another bowler won the immediately previous counted trick', () => {
@@ -265,7 +355,7 @@ describe('turnEngine', () => {
         expect(room.consecutiveBowlingWins).toBe(1);
     });
 
-    test('Trump reveal trick is ignored without breaking a same-player bowling win streak', () => {
+    test('Trump reveal trick resets the same-player bowling win streak', () => {
         const room = makeRoom();
         room.currentTurn = 1;
         room.trumpRevealed = false;
@@ -275,18 +365,18 @@ describe('turnEngine', () => {
         expect(room.lastTrickWinnerPlayerId).toBe('p1');
         expect(room.consecutiveBowlingWins).toBe(1);
 
-        // The reveal trick is skipped by socketHandlers when room.trumpRevealedThisTrick is true.
+        // The reveal trick is skipped and the streak is reset by socketHandlers.
         room.currentTurn = 2;
         room.trumpRevealed = true;
         room.trumpSuit = 'S';
-        expect(room.lastTrickWinnerPlayerId).toBe('p1');
-        expect(room.consecutiveBowlingWins).toBe(1);
+        resetConsecutiveState(room);
+        expect(room.lastTrickWinnerPlayerId).toBe(null);
+        expect(room.consecutiveBowlingWins).toBe(0);
 
         room.currentTurn = 3;
         const third = checkConsecutiveWins(room, 'p1', { suit: 'D', value: 12, id: 'D-12' });
-        expect(third.roundOver).toBe(true);
-        expect(third.winnerTeam).toBe(1);
-        expect(third.reason).toBe('two_consecutive_non_ace_same_player_wins');
-        expect(room.consecutiveBowlingWins).toBe(2);
+        expect(third.roundOver).toBe(false);
+        expect(room.lastTrickWinnerPlayerId).toBe('p1');
+        expect(room.consecutiveBowlingWins).toBe(1);
     });
 });

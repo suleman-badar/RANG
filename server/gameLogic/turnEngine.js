@@ -1,4 +1,5 @@
 import { getBatterTeamIndex, getBowlingTeamIndex } from '../rooms.js';
+import { getOpenStoppingTeam } from './openContract.js';
 
 function isTrumpCard(card, trumpSuit) {
     if (!trumpSuit) return false;
@@ -72,22 +73,27 @@ function resolveTrick(room) {
 
     const winnerPlayerId = best.playerId;
     const winner = room.players.find((p) => p.id === winnerPlayerId);
+    const winningCardWasTrumpCut = best.playedAfterTrumpReveal
+        && isTrumpCard(best.card, trumpSuit)
+        && activeSuit
+        && best.card.suit !== activeSuit;
+
     return {
         winnerPlayerId,
         winnerPlayerIndex: winner ? winner.playerIndex : null,
         winningCard: best.card,
+        winningCardWasTrumpCut,
     };
 }
 
 function getTargetConsecutiveTeam(room) {
     if (room.openMode || room.doubleOpenMode) {
-        if (room.openDeclaredByTeam === null) return null;
-        return 1 - room.openDeclaredByTeam;
+        return getOpenStoppingTeam(room);
     }
     return getBowlingTeamIndex(room);
 }
 
-function checkConsecutiveWins(room, trickWinnerPlayerId, winningCard) {
+function checkConsecutiveWins(room, trickWinnerPlayerId, winningCard, winningContext = {}) {
     const targetTeam = getTargetConsecutiveTeam(room);
     if (targetTeam === null) return { roundOver: false };
 
@@ -95,6 +101,7 @@ function checkConsecutiveWins(room, trickWinnerPlayerId, winningCard) {
     if (!winner) return { roundOver: false };
 
     const isAceWin = winningCard && winningCard.value === 14;
+    const isTrumpCutAceWin = isAceWin && !!winningContext.winningCardWasTrumpCut;
     const winnerTeam = winner.teamIndex;
     const isOpenOrDoubleOpen = room.openMode || room.doubleOpenMode;
 
@@ -104,6 +111,7 @@ function checkConsecutiveWins(room, trickWinnerPlayerId, winningCard) {
         room.consecutiveBowlingWins = 0;
         room.lastTrickWinnerPlayerId = null;
         room.lastTrickWasAce = isAceWin;
+        room.lastTrickWasTrumpCutAce = false;
         return { roundOver: false };
     }
 
@@ -111,11 +119,19 @@ function checkConsecutiveWins(room, trickWinnerPlayerId, winningCard) {
         room.consecutiveBowlingWins = 0;
         room.lastTrickWinnerPlayerId = trickWinnerPlayerId;
         room.lastTrickWasAce = isAceWin;
+        room.lastTrickWasTrumpCutAce = false;
         return { roundOver: false };
     }
 
     const samePlayerAsPrevious = room.lastTrickWinnerPlayerId === trickWinnerPlayerId;
-    const aceAcePair = isOpenOrDoubleOpen && room.currentTurn <= 3 && samePlayerAsPrevious && room.lastTrickWasAce && isAceWin;
+    const previousTrickWasAce = !!room.lastTrickWasAce;
+    const previousTrickWasTrumpCutAce = !!room.lastTrickWasTrumpCutAce;
+    const aceAcePair = isOpenOrDoubleOpen && room.currentTurn <= 3 && samePlayerAsPrevious && previousTrickWasAce && isAceWin;
+    const plainAceAcePair = !isOpenOrDoubleOpen
+        && samePlayerAsPrevious
+        && previousTrickWasAce
+        && isAceWin
+        && !previousTrickWasTrumpCutAce;
 
     if (samePlayerAsPrevious) {
         if (aceAcePair) {
@@ -129,12 +145,17 @@ function checkConsecutiveWins(room, trickWinnerPlayerId, winningCard) {
 
     room.lastTrickWinnerPlayerId = trickWinnerPlayerId;
     room.lastTrickWasAce = isAceWin;
+    room.lastTrickWasTrumpCutAce = isTrumpCutAceWin;
 
     const trumpKnown = room.trumpRevealed || isOpenOrDoubleOpen;
     if (room.consecutiveBowlingWins >= 2) {
         if (!trumpKnown) {
             room.consecutiveBowlingWins = 1;
             room.consecutiveWinBanked = false;
+            return { roundOver: false };
+        }
+        if (plainAceAcePair) {
+            room.consecutiveBowlingWins = 1;
             return { roundOver: false };
         }
         return { roundOver: true, winnerTeam: targetTeam, reason: 'two_consecutive_non_ace_same_player_wins' };
@@ -147,6 +168,7 @@ function resetConsecutiveState(room) {
     room.consecutiveBowlingWins = 0;
     room.consecutiveWinBanked = false;
     room.lastTrickWasAce = false;
+    room.lastTrickWasTrumpCutAce = false;
 }
 
 export {

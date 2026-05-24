@@ -7,6 +7,7 @@ import { revealTrump } from './gameLogic/trumpEngine.js';
 import { canDeclareOpen, executeOpen, canDeclareDoubleOpen, executeDoubleOpen } from './gameLogic/openMode.js';
 import { calculatePoints } from './gameLogic/scoring.js';
 import { getNextBatterIndex, isGameOver } from './gameLogic/rotation.js';
+import { getOpenContractTeam } from './gameLogic/openContract.js';
 
 const readySetsByRoom = Object.create(null);
 
@@ -200,6 +201,8 @@ function emitGameState(io, room) {
             doubleOpenMode: room.doubleOpenMode,
             openDeclaredByTeam: room.openDeclaredByTeam,
             openDeclaredByPlayerId: room.openDeclaredByPlayerId,
+            doubleOpenDeclaredByTeam: room.doubleOpenDeclaredByTeam,
+            doubleOpenDeclaredByPlayerId: room.doubleOpenDeclaredByPlayerId,
             openCountForBatter: room.openCountForBatter,
             batterRoundsPlayed: room.batterRoundsPlayed,
             pausedForPlayerId: room.pausedForPlayerId || null,
@@ -259,6 +262,8 @@ function dealForRound(room) {
     room.doubleOpenMode = false;
     room.openDeclaredByPlayerId = null;
     room.openDeclaredByTeam = null;
+    room.doubleOpenDeclaredByPlayerId = null;
+    room.doubleOpenDeclaredByTeam = null;
 
     room.currentTurn = 1;
     room.currentPlayerIndex = room.currentBatterIndex;
@@ -666,9 +671,15 @@ function registerSocketHandlers(io, socket) {
         const winner = room.players.find((p) => p.id === trick.winnerPlayerId);
         const winnerTeam = winner ? winner.teamIndex : 0;
 
-        const consecutiveCheck = room.trumpRevealedThisTrick
-            ? { roundOver: false }
-            : checkConsecutiveWins(room, trick.winnerPlayerId, trick.winningCard);
+        let consecutiveCheck;
+        if (room.trumpRevealedThisTrick) {
+            resetConsecutiveState(room);
+            consecutiveCheck = { roundOver: false };
+        } else {
+            consecutiveCheck = checkConsecutiveWins(room, trick.winnerPlayerId, trick.winningCard, {
+                winningCardWasTrumpCut: trick.winningCardWasTrumpCut,
+            });
+        }
 
         const isExcludedOpenTurn1 = (room.openMode || room.doubleOpenMode) && room.currentTurn === 1;
 
@@ -683,7 +694,7 @@ function registerSocketHandlers(io, socket) {
 
         // Round completion rules
         const battingTeamIndex = getBatterTeamIndex(room);
-        const alphaTeam = room.openMode || room.doubleOpenMode ? room.openDeclaredByTeam : null;
+        const alphaTeam = room.openMode || room.doubleOpenMode ? getOpenContractTeam(room) : null;
         const defaultWinnerNormal = battingTeamIndex;
         const defaultWinnerOpen = alphaTeam === null ? battingTeamIndex : alphaTeam;
 

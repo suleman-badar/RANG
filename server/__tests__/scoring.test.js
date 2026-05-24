@@ -26,14 +26,14 @@ describe('scoring', () => {
     });
 
     test('Double-Open declarer team wins => +48', () => {
-        const room = { openMode: true, doubleOpenMode: true, openDeclaredByTeam: 1, currentBatterIndex: 0 };
-        const pts = calculatePoints(room, 1);
-        expect(pts).toEqual({ team0Points: 0, team1Points: 48 });
+        const room = { openMode: true, doubleOpenMode: true, openDeclaredByTeam: 1, doubleOpenDeclaredByTeam: 0, currentBatterIndex: 0 };
+        const pts = calculatePoints(room, 0);
+        expect(pts).toEqual({ team0Points: 48, team1Points: 0 });
     });
 
     test('Double-Open declarer team loses => opponent +96', () => {
-        const room = { openMode: true, doubleOpenMode: true, openDeclaredByTeam: 1, currentBatterIndex: 0 };
-        const pts = calculatePoints(room, 0);
-        expect(pts).toEqual({ team0Points: 96, team1Points: 0 });
+        const room = { openMode: true, doubleOpenMode: true, openDeclaredByTeam: 1, doubleOpenDeclaredByTeam: 0, currentBatterIndex: 0 };
+        const pts = calculatePoints(room, 1);
+        expect(pts).toEqual({ team0Points: 0, team1Points: 96 });
     });
 });
