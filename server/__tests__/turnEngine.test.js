@@ -379,4 +379,84 @@ describe('turnEngine', () => {
         expect(room.lastTrickWinnerPlayerId).toBe('p1');
         expect(room.consecutiveBowlingWins).toBe(1);
     });
+
+    // ── Ace-Ace trump-cut distinction tests ──────────────────────────────
+
+    test('Normal mode: two plain Ace wins by the same bowler does NOT end the round', () => {
+        const room = makeRoom();
+        room.trumpRevealed = true;
+        room.trumpSuit = 'S';
+
+        // First trick: bowler p1 wins with Ace of the active suit (followed suit normally)
+        room.lastTrickWinnerPlayerId = 'p1';
+        room.lastTrickWasAce = true;
+        room.lastTrickWasTrumpCutAce = false;
+        room.consecutiveBowlingWins = 1;
+
+        // Second trick: same bowler wins with another Ace
+        const res = checkConsecutiveWins(room, 'p1', { suit: 'D', value: 14, id: 'D-14' }, { winningCardWasTrumpCut: false });
+
+        expect(res.roundOver).toBe(false);
+        expect(room.consecutiveBowlingWins).toBe(1);
+    });
+
+    test('Normal mode: trump-cut Ace followed by any Ace DOES end the round', () => {
+        const room = makeRoom();
+        room.trumpRevealed = true;
+        room.trumpSuit = 'H';
+
+        // First trick: bowler p1 won with trump Ace by cutting (had no active suit cards)
+        room.lastTrickWinnerPlayerId = 'p1';
+        room.lastTrickWasAce = true;
+        room.lastTrickWasTrumpCutAce = true;
+        room.consecutiveBowlingWins = 1;
+
+        // Second trick: same bowler wins with any Ace
+        const res = checkConsecutiveWins(room, 'p1', { suit: 'D', value: 14, id: 'D-14' }, { winningCardWasTrumpCut: false });
+
+        expect(res.roundOver).toBe(true);
+        expect(res.winnerTeam).toBe(1);
+    });
+
+    test('Open mode: two plain Ace wins by the same stopping-team player does NOT end the round', () => {
+        const room = makeRoom();
+        room.openMode = true;
+        room.openDeclaredByTeam = 0;
+        room.trumpRevealed = true;
+        room.trumpSuit = 'S';
+        room.currentTurn = 2;
+
+        // First trick: stopping-team player p1 wins with Ace by following active suit
+        room.lastTrickWinnerPlayerId = 'p1';
+        room.lastTrickWasAce = true;
+        room.lastTrickWasTrumpCutAce = false;
+        room.consecutiveBowlingWins = 1;
+
+        // Second trick: same player wins with another Ace
+        const res = checkConsecutiveWins(room, 'p1', { suit: 'D', value: 14, id: 'D-14' }, { winningCardWasTrumpCut: false });
+
+        expect(res.roundOver).toBe(false);
+        expect(room.consecutiveBowlingWins).toBe(1);
+    });
+
+    test('Open mode: trump-cut Ace followed by any Ace DOES end the round', () => {
+        const room = makeRoom();
+        room.openMode = true;
+        room.openDeclaredByTeam = 0;
+        room.trumpRevealed = true;
+        room.trumpSuit = 'H';
+        room.currentTurn = 2;
+
+        // First trick: stopping-team player p1 won with trump Ace by cutting
+        room.lastTrickWinnerPlayerId = 'p1';
+        room.lastTrickWasAce = true;
+        room.lastTrickWasTrumpCutAce = true;
+        room.consecutiveBowlingWins = 1;
+
+        // Second trick: same player wins with any Ace
+        const res = checkConsecutiveWins(room, 'p1', { suit: 'D', value: 14, id: 'D-14' }, { winningCardWasTrumpCut: false });
+
+        expect(res.roundOver).toBe(true);
+        expect(res.winnerTeam).toBe(1);
+    });
 });

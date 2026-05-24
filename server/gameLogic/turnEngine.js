@@ -126,7 +126,7 @@ function checkConsecutiveWins(room, trickWinnerPlayerId, winningCard, winningCon
     const samePlayerAsPrevious = room.lastTrickWinnerPlayerId === trickWinnerPlayerId;
     const previousTrickWasAce = !!room.lastTrickWasAce;
     const previousTrickWasTrumpCutAce = !!room.lastTrickWasTrumpCutAce;
-    const aceAcePair = isOpenOrDoubleOpen && room.currentTurn <= 3 && samePlayerAsPrevious && previousTrickWasAce && isAceWin;
+    const aceAcePair = isOpenOrDoubleOpen && room.currentTurn <= 3 && samePlayerAsPrevious && previousTrickWasAce && isAceWin && !previousTrickWasTrumpCutAce;
     const plainAceAcePair = !isOpenOrDoubleOpen
         && samePlayerAsPrevious
         && previousTrickWasAce
