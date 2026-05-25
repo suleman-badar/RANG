@@ -126,19 +126,13 @@ function checkConsecutiveWins(room, trickWinnerPlayerId, winningCard, winningCon
     const samePlayerAsPrevious = room.lastTrickWinnerPlayerId === trickWinnerPlayerId;
     const previousTrickWasAce = !!room.lastTrickWasAce;
     const previousTrickWasTrumpCutAce = !!room.lastTrickWasTrumpCutAce;
-    const aceAcePair = isOpenOrDoubleOpen && room.currentTurn <= 3 && samePlayerAsPrevious && previousTrickWasAce && isAceWin;
-    const plainAceAcePair = !isOpenOrDoubleOpen
-        && samePlayerAsPrevious
+    const plainAceAcePair = samePlayerAsPrevious
         && previousTrickWasAce
         && isAceWin
         && !previousTrickWasTrumpCutAce;
 
     if (samePlayerAsPrevious) {
-        if (aceAcePair) {
-            room.consecutiveBowlingWins = 1;
-        } else {
-            room.consecutiveBowlingWins += 1;
-        }
+        room.consecutiveBowlingWins += 1;
     } else {
         room.consecutiveBowlingWins = 1;
     }
