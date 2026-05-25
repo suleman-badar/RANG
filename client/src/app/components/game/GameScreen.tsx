@@ -26,6 +26,7 @@ export function GameScreen() {
     activeSuit,
     trumpSuit,
     trumpRevealed,
+    revealedTrumpCard,
     currentTurn,
     currentRound,
     currentBatterIndex,
@@ -196,6 +197,10 @@ export function GameScreen() {
       </div>
 
       {/* ── Game Table ──────────────────────────────────────────────────────── */}
+      {revealedTrumpCard && (
+        <RevealedTrumpCardOverlay card={revealedTrumpCard} />
+      )}
+
       <div className="flex-1 relative flex flex-col min-h-0">
 
         {/* Top player */}
@@ -438,6 +443,22 @@ export function GameScreen() {
 }
 
 // ─── My Hand ──────────────────────────────────────────────────────────────────
+
+function RevealedTrumpCardOverlay({ card }: { card: Card }) {
+  return (
+    <div className="absolute top-14 right-4 z-20 pointer-events-none">
+      <div className="flex items-center gap-3 rounded-lg border border-amber-500/60 bg-gray-950/90 px-3 py-2 shadow-2xl">
+        <div className="text-right">
+          <p className="text-[10px] uppercase tracking-[0.18em] text-amber-300">
+            Hidden trump
+          </p>
+          <p className="text-xs text-gray-300">Revealed card</p>
+        </div>
+        <PlayingCard card={card} size="sm" className="shadow-lg" />
+      </div>
+    </div>
+  );
+}
 
 function MyHand({
   hand,
