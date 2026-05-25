@@ -265,6 +265,260 @@ describe('turnEngine', () => {
         expect(res.winnerTeam).toBe(1);
     });
 
+    test.each([
+        ['open', { openMode: true, openDeclaredByTeam: 0 }],
+        ['double-open', { openMode: true, doubleOpenMode: true, openDeclaredByTeam: 1, doubleOpenDeclaredByTeam: 0 }],
+    ])('%s mode does not end on two plain Ace wins by the non-declaring team', (_mode, contractState) => {
+        const room = makeRoom();
+        Object.assign(room, contractState);
+        room.trumpRevealed = true;
+        room.trumpSuit = 'S';
+        room.activeSuit = 'H';
+        room.currentTurn = 5;
+        room.currentPlayerIndex = 1;
+        room.players[1].hand = [
+            { suit: 'H', value: 14, id: 'H-14' },
+            { suit: 'S', value: 14, id: 'S-14' },
+        ];
+        room.trickCards = [
+            { playerId: 'p0', card: { suit: 'H', value: 10, id: 'H-10' }, hidden: false, dead: false, playedAfterTrumpReveal: true },
+            { playerId: 'p1', card: null, hidden: false, dead: false, playedAfterTrumpReveal: false },
+            { playerId: 'p2', card: { suit: 'H', value: 12, id: 'H-12' }, hidden: false, dead: false, playedAfterTrumpReveal: true },
+            { playerId: 'p3', card: { suit: 'H', value: 13, id: 'H-13' }, hidden: false, dead: false, playedAfterTrumpReveal: true },
+        ];
+
+        const firstPlay = validatePlay(room, 'p1', 'H-14');
+        expect(firstPlay.valid).toBe(true);
+        room.trickCards[1].card = room.players[1].hand.find((card) => card.id === 'H-14');
+        room.trickCards[1].playedAfterTrumpReveal = true;
+
+        const firstTrick = resolveTrick(room);
+        expect(firstTrick.winnerPlayerId).toBe('p1');
+        expect(firstTrick.winningCardWasTrumpCut).toBe(false);
+
+        const firstCheck = checkConsecutiveWins(room, firstTrick.winnerPlayerId, firstTrick.winningCard, {
+            winningCardWasTrumpCut: firstTrick.winningCardWasTrumpCut,
+        });
+        expect(firstCheck.roundOver).toBe(false);
+        expect(room.consecutiveBowlingWins).toBe(1);
+        expect(room.lastTrickWasAce).toBe(true);
+        expect(room.lastTrickWasTrumpCutAce).toBe(false);
+
+        room.currentTurn = 6;
+        room.currentPlayerIndex = 1;
+        room.activeSuit = 'S';
+        room.trickCards = [
+            { playerId: 'p0', card: { suit: 'S', value: 10, id: 'S-10' }, hidden: false, dead: false, playedAfterTrumpReveal: true },
+            { playerId: 'p1', card: { suit: 'S', value: 14, id: 'S-14' }, hidden: false, dead: false, playedAfterTrumpReveal: true },
+            { playerId: 'p2', card: { suit: 'S', value: 12, id: 'S-12' }, hidden: false, dead: false, playedAfterTrumpReveal: true },
+            { playerId: 'p3', card: { suit: 'S', value: 13, id: 'S-13' }, hidden: false, dead: false, playedAfterTrumpReveal: true },
+        ];
+
+        const secondTrick = resolveTrick(room);
+        expect(secondTrick.winnerPlayerId).toBe('p1');
+        expect(secondTrick.winningCardWasTrumpCut).toBe(false);
+
+        const secondCheck = checkConsecutiveWins(room, secondTrick.winnerPlayerId, secondTrick.winningCard, {
+            winningCardWasTrumpCut: secondTrick.winningCardWasTrumpCut,
+        });
+        expect(secondCheck.roundOver).toBe(false);
+        expect(room.consecutiveBowlingWins).toBe(1);
+        expect(room.lastTrickWinnerPlayerId).toBe('p1');
+        expect(room.lastTrickWasAce).toBe(true);
+        expect(room.lastTrickWasTrumpCutAce).toBe(false);
+    });
+
+    test.each([
+        ['open', { openMode: true, openDeclaredByTeam: 0 }],
+        ['double-open', { openMode: true, doubleOpenMode: true, openDeclaredByTeam: 1, doubleOpenDeclaredByTeam: 0 }],
+    ])('%s mode ends when the first Ace was a trump cut and the same player wins next trick with any Ace', (_mode, contractState) => {
+        const room = makeRoom();
+        Object.assign(room, contractState);
+        room.trumpRevealed = true;
+        room.trumpSuit = 'S';
+        room.activeSuit = 'H';
+        room.currentTurn = 5;
+        room.currentPlayerIndex = 1;
+        room.lastTrickWinnerPlayerId = 'p0';
+        room.consecutiveBowlingWins = 0;
+        room.players[1].hand = [
+            { suit: 'S', value: 14, id: 'S-14' },
+            { suit: 'D', value: 14, id: 'D-14' },
+        ];
+        room.trickCards = [
+            { playerId: 'p0', card: { suit: 'H', value: 10, id: 'H-10' }, hidden: false, dead: false, playedAfterTrumpReveal: true },
+            { playerId: 'p1', card: null, hidden: false, dead: false, playedAfterTrumpReveal: false },
+            { playerId: 'p2', card: { suit: 'H', value: 12, id: 'H-12' }, hidden: false, dead: false, playedAfterTrumpReveal: true },
+            { playerId: 'p3', card: { suit: 'H', value: 13, id: 'H-13' }, hidden: false, dead: false, playedAfterTrumpReveal: true },
+        ];
+
+        const firstPlay = validatePlay(room, 'p1', 'S-14');
+        expect(firstPlay.valid).toBe(true);
+        room.trickCards[1].card = room.players[1].hand.find((card) => card.id === 'S-14');
+        room.trickCards[1].playedAfterTrumpReveal = true;
+
+        const firstTrick = resolveTrick(room);
+        expect(firstTrick.winnerPlayerId).toBe('p1');
+        expect(firstTrick.winningCardWasTrumpCut).toBe(true);
+
+        const firstCheck = checkConsecutiveWins(room, firstTrick.winnerPlayerId, firstTrick.winningCard, {
+            winningCardWasTrumpCut: firstTrick.winningCardWasTrumpCut,
+        });
+        expect(firstCheck.roundOver).toBe(false);
+        expect(room.consecutiveBowlingWins).toBe(1);
+        expect(room.lastTrickWasAce).toBe(true);
+        expect(room.lastTrickWasTrumpCutAce).toBe(true);
+
+        room.currentTurn = 6;
+        room.currentPlayerIndex = 1;
+        room.activeSuit = 'D';
+        room.trickCards = [
+            { playerId: 'p0', card: { suit: 'D', value: 10, id: 'D-10' }, hidden: false, dead: false, playedAfterTrumpReveal: true },
+            { playerId: 'p1', card: { suit: 'D', value: 14, id: 'D-14' }, hidden: false, dead: false, playedAfterTrumpReveal: true },
+            { playerId: 'p2', card: { suit: 'D', value: 12, id: 'D-12' }, hidden: false, dead: false, playedAfterTrumpReveal: true },
+            { playerId: 'p3', card: { suit: 'D', value: 13, id: 'D-13' }, hidden: false, dead: false, playedAfterTrumpReveal: true },
+        ];
+
+        const secondTrick = resolveTrick(room);
+        expect(secondTrick.winnerPlayerId).toBe('p1');
+        expect(secondTrick.winningCardWasTrumpCut).toBe(false);
+
+        const secondCheck = checkConsecutiveWins(room, secondTrick.winnerPlayerId, secondTrick.winningCard, {
+            winningCardWasTrumpCut: secondTrick.winningCardWasTrumpCut,
+        });
+        expect(secondCheck.roundOver).toBe(true);
+        expect(secondCheck.winnerTeam).toBe(1);
+        expect(room.consecutiveBowlingWins).toBe(2);
+    });
+
+    test('Normal hidden mode ends when a bowler wins with a trump-cut Ace and then wins the next trick with any Ace', () => {
+        const room = makeRoom();
+        room.trumpRevealed = true;
+        room.trumpSuit = 'S';
+        room.activeSuit = 'H';
+        room.currentTurn = 5;
+        room.currentPlayerIndex = 1;
+        room.lastTrickWinnerPlayerId = 'p0';
+        room.consecutiveBowlingWins = 0;
+        room.lastTrickWasAce = false;
+        room.lastTrickWasTrumpCutAce = false;
+        room.players[1].hand = [
+            { suit: 'S', value: 14, id: 'S-14' },
+            { suit: 'D', value: 14, id: 'D-14' },
+        ];
+        room.trickCards = [
+            { playerId: 'p0', card: { suit: 'H', value: 10, id: 'H-10' }, hidden: false, dead: false, playedAfterTrumpReveal: true },
+            { playerId: 'p1', card: null, hidden: false, dead: false, playedAfterTrumpReveal: false },
+            { playerId: 'p2', card: { suit: 'H', value: 12, id: 'H-12' }, hidden: false, dead: false, playedAfterTrumpReveal: true },
+            { playerId: 'p3', card: { suit: 'H', value: 13, id: 'H-13' }, hidden: false, dead: false, playedAfterTrumpReveal: true },
+        ];
+
+        const firstPlay = validatePlay(room, 'p1', 'S-14');
+        expect(firstPlay.valid).toBe(true);
+        room.trickCards[1].card = room.players[1].hand.find((card) => card.id === 'S-14');
+        room.trickCards[1].playedAfterTrumpReveal = true;
+
+        const firstTrick = resolveTrick(room);
+        expect(firstTrick.winnerPlayerId).toBe('p1');
+        expect(firstTrick.winningCard).toEqual({ suit: 'S', value: 14, id: 'S-14' });
+        expect(firstTrick.winningCardWasTrumpCut).toBe(true);
+
+        const firstCheck = checkConsecutiveWins(room, firstTrick.winnerPlayerId, firstTrick.winningCard, {
+            winningCardWasTrumpCut: firstTrick.winningCardWasTrumpCut,
+        });
+        expect(firstCheck.roundOver).toBe(false);
+        expect(room.consecutiveBowlingWins).toBe(1);
+        expect(room.lastTrickWasAce).toBe(true);
+        expect(room.lastTrickWasTrumpCutAce).toBe(true);
+
+        room.currentTurn = 6;
+        room.currentPlayerIndex = 1;
+        room.activeSuit = 'D';
+        room.trickCards = [
+            { playerId: 'p0', card: { suit: 'D', value: 10, id: 'D-10' }, hidden: false, dead: false, playedAfterTrumpReveal: true },
+            { playerId: 'p1', card: { suit: 'D', value: 14, id: 'D-14' }, hidden: false, dead: false, playedAfterTrumpReveal: true },
+            { playerId: 'p2', card: { suit: 'D', value: 12, id: 'D-12' }, hidden: false, dead: false, playedAfterTrumpReveal: true },
+            { playerId: 'p3', card: { suit: 'D', value: 13, id: 'D-13' }, hidden: false, dead: false, playedAfterTrumpReveal: true },
+        ];
+
+        const secondTrick = resolveTrick(room);
+        expect(secondTrick.winnerPlayerId).toBe('p1');
+        expect(secondTrick.winningCard).toEqual({ suit: 'D', value: 14, id: 'D-14' });
+        expect(secondTrick.winningCardWasTrumpCut).toBe(false);
+
+        const secondCheck = checkConsecutiveWins(room, secondTrick.winnerPlayerId, secondTrick.winningCard, {
+            winningCardWasTrumpCut: secondTrick.winningCardWasTrumpCut,
+        });
+        expect(secondCheck.roundOver).toBe(true);
+        expect(secondCheck.winnerTeam).toBe(1);
+        expect(room.consecutiveBowlingWins).toBe(2);
+    });
+
+    test('Normal hidden mode does not end when the first Ace followed suit instead of cutting with trump', () => {
+        const room = makeRoom();
+        room.trumpRevealed = true;
+        room.trumpSuit = 'S';
+        room.activeSuit = 'H';
+        room.currentTurn = 5;
+        room.currentPlayerIndex = 1;
+        room.lastTrickWinnerPlayerId = 'p0';
+        room.consecutiveBowlingWins = 0;
+        room.lastTrickWasAce = false;
+        room.lastTrickWasTrumpCutAce = false;
+        room.players[1].hand = [
+            { suit: 'H', value: 14, id: 'H-14' },
+            { suit: 'S', value: 14, id: 'S-14' },
+        ];
+        room.trickCards = [
+            { playerId: 'p0', card: { suit: 'H', value: 10, id: 'H-10' }, hidden: false, dead: false, playedAfterTrumpReveal: true },
+            { playerId: 'p1', card: null, hidden: false, dead: false, playedAfterTrumpReveal: false },
+            { playerId: 'p2', card: { suit: 'H', value: 12, id: 'H-12' }, hidden: false, dead: false, playedAfterTrumpReveal: true },
+            { playerId: 'p3', card: { suit: 'H', value: 13, id: 'H-13' }, hidden: false, dead: false, playedAfterTrumpReveal: true },
+        ];
+
+        const firstPlay = validatePlay(room, 'p1', 'H-14');
+        expect(firstPlay.valid).toBe(true);
+        room.trickCards[1].card = room.players[1].hand.find((card) => card.id === 'H-14');
+        room.trickCards[1].playedAfterTrumpReveal = true;
+
+        const firstTrick = resolveTrick(room);
+        expect(firstTrick.winnerPlayerId).toBe('p1');
+        expect(firstTrick.winningCard).toEqual({ suit: 'H', value: 14, id: 'H-14' });
+        expect(firstTrick.winningCardWasTrumpCut).toBe(false);
+
+        const firstCheck = checkConsecutiveWins(room, firstTrick.winnerPlayerId, firstTrick.winningCard, {
+            winningCardWasTrumpCut: firstTrick.winningCardWasTrumpCut,
+        });
+        expect(firstCheck.roundOver).toBe(false);
+        expect(room.consecutiveBowlingWins).toBe(1);
+        expect(room.lastTrickWasAce).toBe(true);
+        expect(room.lastTrickWasTrumpCutAce).toBe(false);
+
+        room.currentTurn = 6;
+        room.currentPlayerIndex = 1;
+        room.activeSuit = 'S';
+        room.trickCards = [
+            { playerId: 'p0', card: { suit: 'S', value: 10, id: 'S-10' }, hidden: false, dead: false, playedAfterTrumpReveal: true },
+            { playerId: 'p1', card: { suit: 'S', value: 14, id: 'S-14' }, hidden: false, dead: false, playedAfterTrumpReveal: true },
+            { playerId: 'p2', card: { suit: 'S', value: 12, id: 'S-12' }, hidden: false, dead: false, playedAfterTrumpReveal: true },
+            { playerId: 'p3', card: { suit: 'S', value: 13, id: 'S-13' }, hidden: false, dead: false, playedAfterTrumpReveal: true },
+        ];
+
+        const secondTrick = resolveTrick(room);
+        expect(secondTrick.winnerPlayerId).toBe('p1');
+        expect(secondTrick.winningCard).toEqual({ suit: 'S', value: 14, id: 'S-14' });
+        expect(secondTrick.winningCardWasTrumpCut).toBe(false);
+
+        const secondCheck = checkConsecutiveWins(room, secondTrick.winnerPlayerId, secondTrick.winningCard, {
+            winningCardWasTrumpCut: secondTrick.winningCardWasTrumpCut,
+        });
+        expect(secondCheck.roundOver).toBe(false);
+        expect(room.consecutiveBowlingWins).toBe(1);
+        expect(room.lastTrickWinnerPlayerId).toBe('p1');
+        expect(room.lastTrickWasAce).toBe(true);
+        expect(room.lastTrickWasTrumpCutAce).toBe(false);
+    });
+
     test('Hidden-trump consecutive wins remember only the latest same-player win until trump is known', () => {
         const room = makeRoom();
         room.lastTrickWinnerPlayerId = 'p1';
